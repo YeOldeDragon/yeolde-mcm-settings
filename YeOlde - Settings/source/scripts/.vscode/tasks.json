@@ -1,0 +1,17 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Papyrus",
+            "type": "shell",
+            "command": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\SkyrimVR\\Papyrus Compiler\\ScriptCompile.bat",
+            "args": ["${file}"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}

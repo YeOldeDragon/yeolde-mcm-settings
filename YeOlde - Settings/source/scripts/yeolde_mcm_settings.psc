@@ -5,22 +5,35 @@ import StringUtil
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;  YeOlde - Respawn  ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-GlobalVariable property yeolde_var_respawn_none_activated auto
-GlobalVariable property yeolde_var_respawn_stones_activated auto
-GlobalVariable property yeolde_var_respawn_cities_activated auto
-GlobalVariable property yeolde_var_respawn_unknown_location auto
+int property YEOLDE_VAR_RESPAWN_NONE_ACTIVATED_ID = 0x08005902 autoreadonly
+int property YEOLDE_VAR_RESPAWN_STONES_ACTIVATED_ID = 0x0800CABE autoreadonly
+int property YEOLDE_VAR_RESPAWN_CITIES_ACTIVATED_ID = 0x0800CABF autoreadonly
+int property YEOLDE_VAR_RESPAWN_UNKNOWN_LOCATION_ID = 0x08010297 autoreadonly
 
-GlobalVariable property yeolde_var_respawn_bleedout_time auto
-GlobalVariable property yeolde_var_respawn_invisibility_activated auto
+int property YEOLDE_VAR_RESPAWN_BLEEDOUT_TIME_ID = 0x08005903 autoreadonly
+int property YEOLDE_VAR_RESPAWN_INVISIBILITY_ACTIVATED_ID = 0x0800CAC1 autoreadonly
 
-GlobalVariable property yeolde_var_respawn_gold_penalty auto
-GlobalVariable property yeolde_var_respawn_xp_penalty auto
-GlobalVariable property yeolde_var_respawn_xp_penalty_duration auto
+int property YEOLDE_VAR_RESPAWN_GOLD_PENALTY_ID = 0x0800D025 autoreadonly
+int property YEOLDE_VAR_RESPAWN_XP_PENALTY_ID = 0x0800D026 autoreadonly
+int property YEOLDE_VAR_RESPAWN_XP_PENALTY_DURATION_ID = 0x0800D027 autoreadonly
 
-float DEFAULT_BLEEDOUT_TIME = 5.0
-float DEFAULT_INVULNERABILITY_DELAY = 20.0
-float DEFAULT_SEARCH_RANGE = 15000.0
-float DEFAULT_XP_PENALTY_DURATION = 30.0
+GlobalVariable yeolde_var_respawn_none_activated
+GlobalVariable yeolde_var_respawn_stones_activated
+GlobalVariable yeolde_var_respawn_cities_activated
+GlobalVariable yeolde_var_respawn_unknown_location
+
+GlobalVariable yeolde_var_respawn_bleedout_time
+GlobalVariable yeolde_var_respawn_invisibility_activated
+
+GlobalVariable yeolde_var_respawn_gold_penalty
+GlobalVariable yeolde_var_respawn_xp_penalty
+GlobalVariable yeolde_var_respawn_xp_penalty_duration
+
+
+float property DEFAULT_BLEEDOUT_TIME = 5.0 autoreadonly
+float property DEFAULT_INVULNERABILITY_DELAY = 20.0 autoreadonly
+float property DEFAULT_SEARCH_RANGE = 15000.0 autoreadonly
+float property DEFAULT_XP_PENALTY_DURATION = 30.0 autoreadonly
 
 bool respawnActivated
 string[] XPDebuffStr
@@ -34,22 +47,24 @@ GlobalVariable yeolde_var_autoloot_mode
 GlobalVariable yeolde_var_autoloot_range
 GlobalVariable yeolde_var_autoloot_interval
 GlobalVariable yeolde_var_autoloot_max_loot_items
-int YEOLDE_VAR_AUTOLOOT_MODE_ID = 0x0800FB1A
-int YEOLDE_VAR_AUTOLOOT_RANGE_ID = 0x0800FB1B
-int YEOLDE_VAR_AUTOLOOT_INTERVAL_ID = 0x0800FB1C
-int YEOLDE_VAR_AUTOLOOT_MAX_LOOT_ITEMS_ID = 0x0801EE24
-int YEOLDE_QUEST_HYBRID_LOOT_ID = 0x08014C21
+int property YEOLDE_VAR_AUTOLOOT_MODE_ID = 0x0800FB1A autoreadonly
+int property YEOLDE_VAR_AUTOLOOT_RANGE_ID = 0x0800FB1B autoreadonly
+int property YEOLDE_VAR_AUTOLOOT_INTERVAL_ID = 0x0800FB1C autoreadonly
+int property YEOLDE_VAR_AUTOLOOT_MAX_LOOT_ITEMS_ID = 0x0801EE24 autoreadonly
+int property YEOLDE_QUEST_HYBRID_LOOT_ID = 0x08014C21 autoreadonly
 
-int AUTOLOOT_MODE_MANUAL = 0
-int AUTOLOOT_MODE_HYBRID = 1
-int AUTOLOOT_MODE_AUTOLOOT = 2
-string AUTOLOOT_MODE_MANUAL_STR = "Manual"
-string AUTOLOOT_MODE_HYBRID_STR = "Hybrid"
+int property YEOLDE_RESPAWN_ACTIVATED_ID = 0x01005902 autoreadonly
+
+int property AUTOLOOT_MODE_MANUAL = 0 autoreadonly
+int property AUTOLOOT_MODE_HYBRID = 1 autoreadonly
+int property AUTOLOOT_MODE_AUTOLOOT = 2 autoreadonly
+string property AUTOLOOT_MODE_MANUAL_STR = "Manual" autoreadonly
+string property AUTOLOOT_MODE_HYBRID_STR = "Hybrid" autoreadonly
 ; string AUTOLOOT_MODE_AUTOLOOT_STR = "Autoloot"
 
-float DEFAULT_AUTOLOOT_SEARCH_RANGE = 500.0
-float DEFAULT_AUTOLOOT_INTERVAL = 1.0
-int DEFAULT_AUTOLOOT_MAX_LOOT_ITEMS = 5
+float property DEFAULT_AUTOLOOT_SEARCH_RANGE = 500.0 autoreadonly
+float property DEFAULT_AUTOLOOT_INTERVAL = 1.0 autoreadonly
+int property DEFAULT_AUTOLOOT_MAX_LOOT_ITEMS = 5 autoreadonly
 
 bool hybridLootActivated
 int maxLootItems
@@ -61,8 +76,9 @@ float autoloot_interval
 ;;;;;;;;;;;;;;;;;;;;;;;  YeOlde - Crafting Bag  ;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 GlobalVariable yeolde_var_craftingbag_activated
-int YEOLDE_VAR_CRAFTINGBAG_ACTIVATED_ID = 0x07000802
-yeolde_craftingbag_player property playeralias auto
+int property YEOLDE_VAR_CRAFTINGBAG_ACTIVATED_ID = 0x07000802 autoreadonly
+int property YEOLDE_CRAFTINGBAG_QUEST_ID = 0x050A7986 autoreadonly
+Quest yeolde_craftingbag_quest
 
 bool craftingbag_activated = false
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -70,69 +86,89 @@ bool craftingbag_activated = false
 
 Actor _playerRef
 
+bool _crafting_bag_mod_activated
+bool _hybrid_loot_mod_activated
+bool _respawn_mod_activated
 
 ; @overrides SKI_ConfigBase
 event OnConfigInit()  
-    DebugMsg("OnConfigInit", "Crafting bag:" + Game.IsPluginInstalled("YeOlde - Crafting Bag.esp"))
-    DebugMsg("OnConfigInit", "Hybrid Loot:" + Game.IsPluginInstalled("YeOlde - Hybrid Loot.esp"))
-    DebugMsg("OnConfigInit", "YeOlde - Respawn:" + Game.IsPluginInstalled("YeOlde - Respawn.esp"))
+    _crafting_bag_mod_activated = self.IsPluginInstalled("YeOlde - Crafting Bag.esp", YEOLDE_VAR_CRAFTINGBAG_ACTIVATED_ID)
+    _hybrid_loot_mod_activated = self.IsPluginInstalled("YeOlde - Hybrid Loot.esp", YEOLDE_VAR_AUTOLOOT_MODE_ID)
+    _respawn_mod_activated = self.IsPluginInstalled("YeOlde - Respawn.esp", YEOLDE_RESPAWN_ACTIVATED_ID)
+    DebugMsg("OnConfigInit", "Crafting bag:" + _crafting_bag_mod_activated)
+    DebugMsg("OnConfigInit", "Hybrid Loot:" + _hybrid_loot_mod_activated)
+    DebugMsg("OnConfigInit", "Respawn:" + _respawn_mod_activated)
     ;Pages = new String[1]
-    string pagesArrayStr = ""
-    if Game.IsPluginInstalled("YeOlde - Crafting Bag.esp")
-        pagesArrayStr += ";Crafting Bag"
-        yeolde_var_craftingbag_activated = Game.GetFormFromFile(YEOLDE_VAR_CRAFTINGBAG_ACTIVATED_ID, "YeOlde - Crafting Bag.esp") as GlobalVariable
-        DebugMsg("OnConfigInit", "yeolde_var_craftingbag_activated:" + yeolde_var_craftingbag_activated)
-        craftingbag_activated = yeolde_var_craftingbag_activated.GetValueInt() as bool
-    endif
-    if Game.IsPluginInstalled("YeOlde - Hybrid Loot.esp")
-        pagesArrayStr += ";Hybrid Loot"
-        yeolde_var_autoloot_mode = Game.GetFormFromFile(YEOLDE_VAR_AUTOLOOT_MODE_ID, "YeOlde - Hybrid Loot.esp") as GlobalVariable
-        DebugMsg("OnConfigInit", "yeolde_var_autoloot_mode:" + yeolde_var_autoloot_mode)
-        yeolde_var_autoloot_range = Game.GetFormFromFile(YEOLDE_VAR_AUTOLOOT_RANGE_ID, "YeOlde - Hybrid Loot.esp") as GlobalVariable
-        DebugMsg("OnConfigInit", "yeolde_var_autoloot_range:" + yeolde_var_autoloot_range)
-        yeolde_var_autoloot_interval = Game.GetFormFromFile(YEOLDE_VAR_AUTOLOOT_INTERVAL_ID, "YeOlde - Hybrid Loot.esp") as GlobalVariable
-        DebugMsg("OnConfigInit", "yeolde_var_autoloot_interval:" + yeolde_var_autoloot_interval)
-        yeolde_var_autoloot_max_loot_items = Game.GetFormFromFile(YEOLDE_VAR_AUTOLOOT_MAX_LOOT_ITEMS_ID, "YeOlde - Hybrid Loot.esp") as GlobalVariable
-        DebugMsg("OnConfigInit", "yeolde_var_autoloot_max_loot_items:" + yeolde_var_autoloot_max_loot_items)
+    ; string pagesArrayStr = ""
+    ; if (_crafting_bag_mod_activated)
+    ;     pagesArrayStr += ";Crafting Bag"
+    ;     yeolde_var_craftingbag_activated = Game.GetFormFromFile(YEOLDE_VAR_CRAFTINGBAG_ACTIVATED_ID, "YeOlde - Crafting Bag.esp") as GlobalVariable
+    ;     DebugMsg("OnConfigInit", "yeolde_var_craftingbag_activated:" + yeolde_var_craftingbag_activated)
+    ;     craftingbag_activated = yeolde_var_craftingbag_activated.GetValueInt() as bool
+    ; endif
+    ; if _hybrid_loot_mod_activated
+    ;     pagesArrayStr += ";Hybrid Loot"
+    ;     yeolde_var_autoloot_mode = Game.GetFormFromFile(YEOLDE_VAR_AUTOLOOT_MODE_ID, "YeOlde - Hybrid Loot.esp") as GlobalVariable
+    ;     yeolde_var_autoloot_range = Game.GetFormFromFile(YEOLDE_VAR_AUTOLOOT_RANGE_ID, "YeOlde - Hybrid Loot.esp") as GlobalVariable
+    ;     yeolde_var_autoloot_interval = Game.GetFormFromFile(YEOLDE_VAR_AUTOLOOT_INTERVAL_ID, "YeOlde - Hybrid Loot.esp") as GlobalVariable
+    ;     yeolde_var_autoloot_max_loot_items = Game.GetFormFromFile(YEOLDE_VAR_AUTOLOOT_MAX_LOOT_ITEMS_ID, "YeOlde - Hybrid Loot.esp") as GlobalVariable
 
-        Quest hybrid_loot_quest = Game.GetFormFromFile(YEOLDE_QUEST_HYBRID_LOOT_ID, "YeOlde - Hybrid Loot.esp") as Quest
-        DebugMsg("OnConfigInit", "hybrid_loot_quest:" + hybrid_loot_quest)
-        loot_script = hybrid_loot_quest.GetAlias(0) as yeolde_loot
-        DebugMsg("OnConfigInit", "loot_script:" + loot_script)
-    endif
-    if Game.IsPluginInstalled("YeOlde - Respawn.esp")
-        pagesArrayStr += ";Respawn"
-    endif
-    pagesArrayStr = Substring(pagesArrayStr, 1) ; Remove first ";"
+    ;     Quest hybrid_loot_quest = Game.GetFormFromFile(YEOLDE_QUEST_HYBRID_LOOT_ID, "YeOlde - Hybrid Loot.esp") as Quest
+    ;     loot_script = hybrid_loot_quest.GetAlias(0) as yeolde_loot
+    ; endif
+    ; if _respawn_mod_activated
+    ;     pagesArrayStr += ";Respawn"
 
-    if GetLength(pagesArrayStr) > 0
-        Pages = Split(pagesArrayStr, ";")
-    endif
+    ;     XPDebuffStr = new String[4]
+    ;     XPDebuffStr[0] = "No XP penalty"
+    ;     XPDebuffStr[1] = "10% penalty"
+    ;     XPDebuffStr[2] = "20% penalty"
+    ;     XPDebuffStr[3] = "40% penalty"
 
-    XPDebuffStr = new String[4]
-    XPDebuffStr[0] = "No XP penalty"
-    XPDebuffStr[1] = "10% penalty"
-    XPDebuffStr[2] = "20% penalty"
-    XPDebuffStr[3] = "40% penalty"
+    ;     yeolde_craftingbag_quest = Game.GetFormFromFile(YEOLDE_CRAFTINGBAG_QUEST_ID, "YeOlde - Respawn.esp") as Quest
+    ;     yeolde_var_respawn_none_activated = Game.GetFormFromFile(YEOLDE_VAR_RESPAWN_NONE_ACTIVATED_ID, "YeOlde - Respawn.esp") as GlobalVariable
+    ;     yeolde_var_respawn_stones_activated = Game.GetFormFromFile(YEOLDE_VAR_RESPAWN_STONES_ACTIVATED_ID, "YeOlde - Respawn.esp") as GlobalVariable
+    ;     yeolde_var_respawn_cities_activated = Game.GetFormFromFile(YEOLDE_VAR_RESPAWN_CITIES_ACTIVATED_ID, "YeOlde - Respawn.esp") as GlobalVariable
+    ;     yeolde_var_respawn_unknown_location = Game.GetFormFromFile(YEOLDE_VAR_RESPAWN_UNKNOWN_LOCATION_ID, "YeOlde - Respawn.esp") as GlobalVariable
+    ;     yeolde_var_respawn_bleedout_time = Game.GetFormFromFile(YEOLDE_VAR_RESPAWN_BLEEDOUT_TIME_ID, "YeOlde - Respawn.esp") as GlobalVariable
+    ;     yeolde_var_respawn_invisibility_activated = Game.GetFormFromFile(YEOLDE_VAR_RESPAWN_INVISIBILITY_ACTIVATED_ID, "YeOlde - Respawn.esp") as GlobalVariable
+    ;     yeolde_var_respawn_gold_penalty = Game.GetFormFromFile(YEOLDE_VAR_RESPAWN_GOLD_PENALTY_ID, "YeOlde - Respawn.esp") as GlobalVariable
+    ;     yeolde_var_respawn_xp_penalty = Game.GetFormFromFile(YEOLDE_VAR_RESPAWN_XP_PENALTY_ID, "YeOlde - Respawn.esp") as GlobalVariable
+    ;     yeolde_var_respawn_xp_penalty_duration = Game.GetFormFromFile(YEOLDE_VAR_RESPAWN_XP_PENALTY_DURATION_ID, "YeOlde - Respawn.esp") as GlobalVariable
+    ; endif
+    ; pagesArrayStr = Substring(pagesArrayStr, 1) ; Remove first ";"
+
+    ; if GetLength(pagesArrayStr) > 0
+    ;     Pages = Split(pagesArrayStr, ";")
+    ; endif
     
 endEvent  
+
+bool function IsPluginInstalled(string pluginName, int formID)
+    return (Game.GetFormFromFile(formID, pluginName) != none) as bool
+endfunction
 
 ; @implements SKI_QuestBase
 event OnGameReload()
 	parent.OnGameReload()
 	_playerRef = Game.GetPlayer()
-    respawnActivated = _playerRef.IsEssential()
 
-    ; lootModeIndex = yeolde_var_autoloot_mode.GetValueInt()
-    hybridLootActivated = yeolde_var_autoloot_mode.GetValueInt() as bool
-    maxLootItems = yeolde_var_autoloot_max_loot_items.GetValueInt()
-    autoloot_range = yeolde_var_autoloot_range.GetValue()
-    autoloot_interval = yeolde_var_autoloot_interval.GetValue()
+    if _respawn_mod_activated
+        respawnActivated = _playerRef.IsEssential()
+    endif
 
-    if hybridLootActivated
-        lootValue = AUTOLOOT_MODE_HYBRID_STR
-    else
-        lootValue = AUTOLOOT_MODE_MANUAL_STR
+    if _hybrid_loot_mod_activated
+        ; lootModeIndex = yeolde_var_autoloot_mode.GetValueInt()
+        hybridLootActivated = yeolde_var_autoloot_mode.GetValueInt() as bool
+        maxLootItems = yeolde_var_autoloot_max_loot_items.GetValueInt()
+        autoloot_range = yeolde_var_autoloot_range.GetValue()
+        autoloot_interval = yeolde_var_autoloot_interval.GetValue()
+
+        if hybridLootActivated
+            lootValue = AUTOLOOT_MODE_HYBRID_STR
+        else
+            lootValue = AUTOLOOT_MODE_MANUAL_STR
+        endif
     endif
 endEvent
 
@@ -220,6 +256,7 @@ state CraftingBag
         craftingbag_activated = !craftingbag_activated
         yeolde_var_craftingbag_activated.SetValueInt(craftingbag_activated as int)
         SetToggleOptionValueST(craftingbag_activated)
+        yeolde_craftingbag_player playeralias = yeolde_craftingbag_quest.GetAlias(0) as yeolde_craftingbag_player
 
         if craftingbag_activated
             playeralias.EnableCraftingBag()     
@@ -231,6 +268,8 @@ state CraftingBag
 	event OnDefaultST()
         SetToggleOptionValueST(false)
         yeolde_var_craftingbag_activated.SetValueInt(0)
+        
+        yeolde_craftingbag_player playeralias = yeolde_craftingbag_quest.GetAlias(0) as yeolde_craftingbag_player
         playeralias.DisableCraftingBag()     
     endEvent
 
