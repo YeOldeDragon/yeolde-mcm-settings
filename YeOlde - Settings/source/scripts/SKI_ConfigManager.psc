@@ -11,6 +11,8 @@ scriptname SKI_ConfigManager extends SKI_QuestBase hidden
 ; 3:	- Removed lock again until I have time to test it properly
 ;
 ; 4:	- Added redundancy for registration process
+;
+; 4.1	- (YeOldeDragon): Added option for enabling/disabling MCM menus
 
 int function GetVersion()
 	return 4
@@ -47,19 +49,25 @@ int					_addCounter		= 0
 int					_updateCounter	= 0
 
 ; -- YeOlde -- 
-
 SKI_ConfigBase[]	_allMods
 string[]			_allNames
 bool[]				_isModEnabled
 bool 				_yeoldeModInitialized = false
 
+; YeOlde
 string[] function GetAllModNames()
 	return _allNames
 endFunction
 
+; YeOlde
 bool[] function GetAllEnabledModFlags()
 	return _isModEnabled
 endFunction
+
+; ; YeOlde
+; SKI_ConfigBase[] function GetAllMods()
+; 	return _allMods
+; endFunction
 
 int function GetNbMods()
 	return _configCount
@@ -89,7 +97,6 @@ EndFunction
 ; INITIALIZATION ----------------------------------------------------------------------------------
 
 event OnInit()
-	Log("YeOldeMCM: Initializing data in OnInit")
 	_modConfigs	= new SKI_ConfigBase[128]
 	_modNames	= new string[128]
 	_allMods	= new SKI_ConfigBase[128]
@@ -109,7 +116,6 @@ endEvent
 ; @implements SKI_QuestBase
 event OnGameReload()
 	if (!_yeoldeModInitialized)	
-		Log("YeOldeMCM: Initializing data in OnGameReload")
 		_allMods	= new SKI_ConfigBase[128]
 		_allNames	= new string[128]
 		_isModEnabled	= new bool[128]
@@ -304,18 +310,19 @@ endEvent
 
 ; FUNCTIONS ---------------------------------------------------------------------------------------
 
+; YeOlde
 int function FindModIndex(SKI_ConfigBase a_menu)
 	int i = 0
 	while (i < _allMods.length)
 		if (_allMods[i] == a_menu)
 			return i
-		endIf
-			
+		endIf			
 		i += 1
 	endWhile
 
 	return -1
 endFunction
+
 
 ; YeOlde
 int function EnableModByName(string a_modName)
@@ -344,6 +351,8 @@ int function EnableModByName(string a_modName)
     return result
 endFunction
 
+
+; YeOlde
 int function EnableMod(SKI_ConfigBase a_menu, string a_modName)
     Debug.Trace("yeolde_SKI_ConfigManager::EnableMod -> " + a_modName)
 	
@@ -386,6 +395,8 @@ int function DisableModByName(string a_modName)
     return result
 endFunction
 
+
+; YeOlde
 int function DisableMod(SKI_ConfigBase a_menu, string a_modName)
 	Debug.Trace("yeolde_SKI_ConfigManager::DisableMod -> " + a_modName)
 
@@ -484,6 +495,16 @@ int function UnregisterMod(SKI_ConfigBase a_menu)
 	return -1
 endFunction
 
+; YeOlde
+function ForceResetFromMCMMenu()	
+	; We aren't supposed to add/remove MSM menu while in menu mode. This is an exception.	
+	GotoState("")
+	ForceReset()
+
+	; Since we are in menu mode, we set back the BUSY state.
+	GotoState("BUSY")
+endfunction
+
 ; @interface
 function ForceReset()
 	Log("Forcing config manager reset...")
@@ -510,7 +531,6 @@ endFunction
 
 function CleanUp()
 	GotoState("BUSY")
-	Log("YeOldeMCM: Cleanup started")
 
 	_cleanupFlag = false
 
@@ -532,7 +552,6 @@ function CleanUp()
 
 		i += 1
 	endWhile
-	Log("YeOldeMCM: Cleanup ended: " + _configCount + " items") 
 
 	GotoState("")
 endFunction
@@ -557,11 +576,13 @@ function Log(string a_msg)
 	Debug.Trace(self + ": " + a_msg)
 endFunction
 
+; Only for Skyrim VR (won't be used in SE)
 function OnInputSelect(String a_eventName, String a_strArg, Float a_numArg, Form a_sender)
 	Int optionIndex = a_numArg as Int
 	_activeConfig.RequestInputDialogData(optionIndex)
 endFunction
 
+; Only for Skyrim VR (won't be used in SE)
 function OnInputAccept(String a_eventName, String a_strArg, Float a_numArg, Form a_sender)
 	_activeConfig.SetInputText(a_strArg)
 	ui.InvokeBool(self.JOURNAL_MENU, self.MENU_ROOT + ".unlock", true)
@@ -587,8 +608,10 @@ state BUSY
 	endFunction
 
 	function ForceReset()
+		Log("ForceReset called while in busy state")
 	endFunction
 
 	function CleanUp()
+		Log("CleanUp called while in busy state")
 	endFunction
 endState
