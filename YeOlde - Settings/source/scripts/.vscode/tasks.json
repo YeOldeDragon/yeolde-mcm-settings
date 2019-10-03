@@ -6,12 +6,15 @@
         {
             "label": "Papyrus",
             "type": "shell",
-            "command": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\SkyrimVR\\Papyrus Compiler\\ScriptCompile.bat",
-            "args": ["${file}"],
+            "command": "D:\\Sandbox\\yeolde-deploy-app\\YeOlde - Deploy\\bin\\Debug\\Deploy.exe",
+            "args": [
+                "${file}"
+            ],
             "group": {
                 "kind": "build",
                 "isDefault": true
-            }
+            },
+            "problemMatcher": []
         }
     ]
 }

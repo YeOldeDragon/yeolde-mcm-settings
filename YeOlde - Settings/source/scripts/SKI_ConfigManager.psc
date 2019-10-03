@@ -46,18 +46,87 @@ bool				_cleanupFlag	= false
 int					_addCounter		= 0
 int					_updateCounter	= 0
 
+; -- YeOlde -- 
+
+SKI_ConfigBase[]	_allMods
+string[]			_allNames
+bool[]				_isModEnabled
+bool 				_yeoldeModInitialized = false
+
+string[] function GetAllModNames()
+	return _allNames
+endFunction
+
+bool[] function GetAllEnabledModFlags()
+	return _isModEnabled
+endFunction
+
+int function GetNbMods()
+	return _configCount
+endFunction
+
+Function SortArray (string[] array)
+	Int Index1
+	Int Index2 = array.Length - 1
+	 
+	While (Index2 > 0)
+		Index1 = 0
+		While (Index1 < Index2)
+			If (array[Index1] == "")
+				array[Index1] = array[Index1 + 1]
+				array[Index1 + 1] = None
+			elseif (array[Index1] > array[Index1 + 1])
+				string swapVal = array[Index1]
+				array[Index1] = array[Index1 + 1]
+				array[Index1 + 1] = swapVal
+			EndIf
+			Index1 += 1
+		EndWhile
+		Index2 -= 1
+	EndWhile
+EndFunction
 
 ; INITIALIZATION ----------------------------------------------------------------------------------
 
 event OnInit()
+	Log("YeOldeMCM: Initializing data in OnInit")
 	_modConfigs	= new SKI_ConfigBase[128]
 	_modNames	= new string[128]
+	_allMods	= new SKI_ConfigBase[128]
+	_allNames	= new string[128]
+	_isModEnabled	= new bool[128]
+
+	int i = 0
+	while (i<_isModEnabled.Length)
+		_isModEnabled[i] = true
+		i += 1
+	endWhile
+	_yeoldeModInitialized = true
 
 	OnGameReload()
 endEvent
 
 ; @implements SKI_QuestBase
 event OnGameReload()
+	if (!_yeoldeModInitialized)	
+		Log("YeOldeMCM: Initializing data in OnGameReload")
+		_allMods	= new SKI_ConfigBase[128]
+		_allNames	= new string[128]
+		_isModEnabled	= new bool[128]
+		_curConfigID = 0
+
+		int i = 0
+		while (i<_allMods.Length)
+			_isModEnabled[i] = true
+			_allMods[i] = _modConfigs[i]
+			_allNames[i] = _modNames[i]
+			i += 1
+		endWhile
+
+		_yeoldeModInitialized = true
+	endif
+
+
 	RegisterForModEvent("SKICP_modSelected", "OnModSelect")
 	RegisterForModEvent("SKICP_pageSelected", "OnPageSelect")
 	RegisterForModEvent("SKICP_optionHighlighted", "OnOptionHighlight")
@@ -70,9 +139,13 @@ event OnGameReload()
 	RegisterForModEvent("SKICP_menuAccepted", "OnMenuAccept")
 	RegisterForModEvent("SKICP_colorSelected", "OnColorSelect")
 	RegisterForModEvent("SKICP_colorAccepted", "OnColorAccept")
-	self.RegisterForModEvent("SKICP_inputSelected", "OnInputSelect")
-	self.RegisterForModEvent("SKICP_inputAccepted", "OnInputAccept")
 	RegisterForModEvent("SKICP_dialogCanceled", "OnDialogCancel")
+
+	Log("SKSE version: " + SKSE.GetVersionRelease())
+	if(SKSE.GetVersionRelease() == 58) ; Skyrim VR   
+		RegisterForModEvent("SKICP_inputSelected", "OnInputSelect")
+		RegisterForModEvent("SKICP_inputAccepted", "OnInputAccept")
+	endif
 
 	RegisterForMenu(JOURNAL_MENU)
 
@@ -231,26 +304,103 @@ endEvent
 
 ; FUNCTIONS ---------------------------------------------------------------------------------------
 
+int function FindModIndex(SKI_ConfigBase a_menu)
+	int i = 0
+	while (i < _allMods.length)
+		if (_allMods[i] == a_menu)
+			return i
+		endIf
+			
+		i += 1
+	endWhile
+
+	return -1
+endFunction
 
 ; YeOlde
+int function EnableModByName(string a_modName)
+	Debug.Trace("yeolde_SKI_ConfigManager::EnableModByName -> " + a_modName)
+	; We aren't supposed to add/remove menu while in menu mode. This is an exception.
+	GotoState("")
+	SKI_ConfigBase menu = none
+
+	int i = 0
+	while (i < _allNames.Length)
+		if (_allNames[i] == a_modName)
+			menu = _allMods[i]
+
+			i = _allNames.Length
+		endif
+		i += 1
+	endWhile
+
+	if (menu == none)		
+		Debug.Trace("yeolde_SKI_ConfigManager::EnableModByName -> Can't find menu '" + a_modName + "'")
+		return -1
+	endif
+
+	int result = EnableMod(menu, a_modName)
+	GotoState("BUSY")	
+    return result
+endFunction
+
 int function EnableMod(SKI_ConfigBase a_menu, string a_modName)
     Debug.Trace("yeolde_SKI_ConfigManager::EnableMod -> " + a_modName)
-
-    int configID = RegisterMod(a_menu, a_modName)
-	RegisterForSingleUpdate(2)
+	
+	int configID = RegisterMod(a_menu, a_modName)
+	
+	GotoState("BUSY")	
+	UI.InvokeStringA(JOURNAL_MENU, MENU_ROOT + ".setModNames", _modNames);
+	GotoState("")
     
+	RegisterForSingleUpdate(2)
     return configID
 endFunction
 
 
 ; YeOlde
+int function DisableModByName(string a_modName)
+	Debug.Trace("yeolde_SKI_ConfigManager::DisableModByName -> " + a_modName)
+	; We aren't supposed to add/remove menu while in menu mode. This is an exception.
+	GotoState("")
+	SKI_ConfigBase menu = none
+
+	int i = 0
+	while (i < _allNames.Length)
+		if (_allNames[i] == a_modName)
+			menu = _allMods[i]
+
+			i = _allNames.Length
+		endif
+		i += 1
+	endWhile
+
+	if (menu == none)		
+		Debug.Trace("yeolde_SKI_ConfigManager::DisableModByName -> Can't find menu '" + a_modName + "'")
+		return -1
+	endif
+	
+	int result = DisableMod(menu, a_modName)
+	GotoState("BUSY")
+
+    return result
+endFunction
+
 int function DisableMod(SKI_ConfigBase a_menu, string a_modName)
-    Debug.Trace("yeolde_SKI_ConfigManager::DisableMod -> " + a_modName)
+	Debug.Trace("yeolde_SKI_ConfigManager::DisableMod -> " + a_modName)
 
-    int configID = UnregisterMod(a_menu)
+	int index = FindModIndex(a_menu)
+	_isModEnabled[index] = false
+	_modConfigs[index] = none
+	_modNames[index] = ""
+	
+	; int configID = UnregisterMod(a_menu)
+	
+	UI.InvokeStringA(JOURNAL_MENU, MENU_ROOT + ".setModNames", _modNames);
+	GotoState("")
+	
     RegisterForSingleUpdate(2)
-
-    return configID
+    return index
 endFunction
 
 
@@ -266,8 +416,18 @@ int function RegisterMod(SKI_ConfigBase a_menu, string a_modName)
 
 	; Already registered?
 	int i = 0
-	while (i < _modConfigs.length)
-		if (_modConfigs[i] == a_menu)
+	while (i < _allMods.length)
+		if (_allMods[i] == a_menu)
+			if (_modConfigs[i] == none)
+				; The mod is registered, but disabled
+				_isModEnabled[i] = true;
+				_modConfigs[i] = a_menu
+				_modNames[i] = a_modName
+				
+				; Track mods added in the current cycle so we don't have to display one message per mod
+				_addCounter += 1
+			endif
+			
 			GotoState("")
 			return i
 		endIf
@@ -283,8 +443,11 @@ int function RegisterMod(SKI_ConfigBase a_menu, string a_modName)
 		return -1
 	endIf
 
+	_allMods[configID] = a_menu
 	_modConfigs[configID] = a_menu
 	_modNames[configID] = a_modName
+	_allNames[configID] = a_modName
+	_isModEnabled[configID] = true
 	
 	_configCount += 1
 
@@ -306,6 +469,8 @@ int function UnregisterMod(SKI_ConfigBase a_menu)
 		if (_modConfigs[i] == a_menu)
 			_modConfigs[i] = none
 			_modNames[i] = ""
+			_allNames[i] = ""
+			_allMods[i] = none
 			_configCount -= 1
 
 			GotoState("")
@@ -330,6 +495,8 @@ function ForceReset()
 	while (i < _modConfigs.length)
 		_modConfigs[i] = none
 		_modNames[i] = ""
+		_allNames[i] = ""
+		_allMods[i] = none
 		i += 1
 	endWhile
 
@@ -343,21 +510,29 @@ endFunction
 
 function CleanUp()
 	GotoState("BUSY")
+	Log("YeOldeMCM: Cleanup started")
 
 	_cleanupFlag = false
 
 	_configCount = 0
 	int i = 0
-	while (i < _modConfigs.length)
-		if (_modConfigs[i] == none || _modConfigs[i].GetFormID() == 0)
+	while (i < _allMods.length)
+		if (_allMods[i] == none || _allMods[i].GetFormID() == 0)
 			_modConfigs[i] = none
+			_allMods[i] = none
 			_modNames[i] = ""
+			_allNames[i] = ""
 		else
+			if (_isModEnabled[i] == true)
+				_modConfigs[i] = _allMods[i]
+				_modNames[i] = _allNames[i]
+			endif
 			_configCount += 1
 		endIf
 
 		i += 1
 	endWhile
+	Log("YeOldeMCM: Cleanup ended: " + _configCount + " items") 
 
 	GotoState("")
 endFunction
@@ -365,7 +540,7 @@ endFunction
 int function NextID()
 	int startIdx = _curConfigID
 	
-	while (_modConfigs[_curConfigID] != none)
+	while (_allMods[_curConfigID] != none)
 		_curConfigID += 1
 		if (_curConfigID >= 128)
 			_curConfigID = 0
@@ -395,6 +570,14 @@ endFunction
 ; STATES ---------------------------------------------------------------------------------------
 
 state BUSY
+	int function EnableMod(SKI_ConfigBase a_menu, string a_modName)
+		return -2
+	endFunction
+
+	int function DisableMod(SKI_ConfigBase a_menu, string a_modName)
+		return -2
+	endFunction
+
 	int function RegisterMod(SKI_ConfigBase a_menu, string a_modName)
 		return -2
 	endFunction
