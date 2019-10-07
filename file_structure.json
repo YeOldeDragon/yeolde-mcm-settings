@@ -1,0 +1,44 @@
+{
+    "Mod Name": [
+        {
+            "Page Name":[
+                {
+                    "0": {
+                        "option_type": 2,
+                        "text": "Texte de l'option",
+                        "string_value": "sfadfasd",
+                        "float_value": 2.3,
+                        "state_name": "StateOption"
+                        },
+                    "1": {
+                        "option_type": 2,
+                        "text": "Texte de l'option",
+                        "string_value": "sfadfasd",
+                        "float_value": 2.3,
+                        "state_name": "StateOption"
+                        }
+                }
+            ],
+            "Page Name 2":[
+                {
+                    "0": {
+                    "option_id": 0,
+                    "option_type": 2,
+                    "text": "Texte de l'option",
+                    "string_value": "sfadfasd",
+                    "float_value": 2.3,
+                    "state_name": "StateOption"
+                    },
+                    "1": {
+                    "option_id": 0,
+                    "option_type": 2,
+                    "text": "Texte de l'option",
+                    "string_value": "sfadfasd",
+                    "float_value": 2.3,
+                    "state_name": "StateOption"
+                    }
+                }
+            ]
+        }
+    ]
+}

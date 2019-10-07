@@ -2,6 +2,7 @@ scriptname yeolde_mcm_settings extends SKI_ConfigBase
 
 import Game
 import StringUtil
+import JsonUtil
 
 SKI_ConfigManager property manager auto
 string[] property _modNames auto
@@ -30,8 +31,9 @@ event OnConfigInit()
 
     ; string pagesArrayStr = "MCM Menu Settings"
     
-    Pages = new String[1]
-    Pages[0] = "MCM Menu Settings"
+    Pages = new String[2]
+    Pages[0] = "Show/hide menus"
+    Pages[1] = "Import/export settings"
 
     ; if self.IsPluginInstalled("YeOlde - Crafting Bag.esp", YEOLDE_VAR_CRAFTINGBAG_ACTIVATED_ID)
     ;     pagesArrayStr += ";YeOlde - Crafting Bag"
@@ -77,7 +79,7 @@ event OnPageReset(string a_page)
     _modNames = manager.GetAllModNames()
     _modEnableFlags = manager.GetAllEnabledModFlags()
     
-    if a_page == "MCM Menu Settings"
+    if a_page == "Show/hide menus"
         SetCursorFillMode(TOP_TO_BOTTOM)
         AddHeaderOption("Available MCM Menus")
         int index = 0
@@ -97,8 +99,19 @@ event OnPageReset(string a_page)
         SetCursorPosition(1)
         AddHeaderOption("Debug / Panic button")
         AddTextOptionST("ForceMCMReset", "Press to reset MCM menus", "Press to reset")    
+    
+    elseif a_page == "Import/export settings"
+        SetCursorFillMode(TOP_TO_BOTTOM)
+        AddHeaderOption("Import / Export MCM configurations")
+        AddTextOptionST("MCMValuesBackup", "Backup your MCM config", "Press to backup")  
+        AddEmptyOption()
+        AddTextOptionST("ImportMCMValues", "Import MCM menu values", "Press to import") 
 
-    ; elseif a_page == "YeOlde - Crafting Bag"
+        SetCursorPosition(1)
+        AddHeaderOption("Debug")
+        AddTextOptionST("ClearMCMBackup", "Clear MCM backup content", "Clear backup")
+    
+        ; elseif a_page == "YeOlde - Crafting Bag"
     ;     SetCursorFillMode(TOP_TO_BOTTOM)
     ;     AddHeaderOption("YeOlde - Crafting Bag")
     ;     ; TODO something!
@@ -144,9 +157,74 @@ event OnOptionSelect(int a_option)
     endif
 endEvent
 
+; @implements SKI_ConfigBase
+event OnOptionDefault(int a_option)
+	{Called when resetting an option to its default value}
+
+    if (CurrentPage == Pages[0])
+        int i = 0
+        while (i<_modMenuToggle.Length)
+            if (a_option == _modMenuToggle[i])
+                int result = manager.EnableModByName(_modNames[i])
+
+                if(result > -1)
+                    _modEnableFlags[i] = true
+                    SetToggleOptionValue(a_option, true)
+                else
+                    Log("SkyUI is busy, please try again...")
+                endif
+                return
+            endif
+            
+            i += 1
+        endwhile
+    endif
+endEvent
+
+
+
+function SetYeOldeBackupValues(string jsonPath, int index, int optionType, string strValue, int intValue, float floatValue)
+    ; Since we are managing backups, we don't backup ourself for the moment.
+    ; TODO: Backup ourself but backup/import buttons.
+endfunction
+
+state ImportMCMValues
+    event OnSelectST()
+        
+        ShowMessage("Your menus will go wild while importing. Please wait until it goes back to the MCM menu main page.", false)
+        SetTextOptionValueST("importing...")
+        manager.ImportAllMcmMenuValues(OPTIONS_DEFAULT_BACKUP_FILE)
+	endEvent
+
+	event OnDefaultST()
+		SetTextOptionValueST("Press to import")
+	endEvent
+
+	event OnHighlightST()
+		SetInfoText("Press the button and wait until I do the magic stuff!")
+	endEvent
+endState
+
+state ClearMCMBackup
+    event OnSelectST()
+        SetTextOptionValueST("deleting values...")
+        manager.ResetMCMBackupFile(OPTIONS_DEFAULT_BACKUP_FILE)
+	endEvent
+
+	event OnDefaultST()
+		SetTextOptionValueST("Press to import")
+	endEvent
+
+	event OnHighlightST()
+		SetInfoText("Press the button and wait until I do the magic stuff!")
+	endEvent
+endState
+
 state ForceMCMReset
     event OnSelectST()
         SetTextOptionValueST("reseting...")
+        
+        ; ShowMessage("Import is completed, please exit menu to complete the update.", false)
         manager.ForceResetFromMCMMenu()
 		SetTextOptionValueST("Press to reset")
 	endEvent
@@ -157,6 +235,22 @@ state ForceMCMReset
 
 	event OnHighlightST()
 		SetInfoText("Press the button, leave the menu and wait a minute or so. Every MCM menus will reset to default.")
+	endEvent
+endState
+
+state MCMValuesBackup
+    event OnSelectST()
+        ShowMessage("Your menus will go wild while creating the backup. Please wait until it goes back to the MCM menu main page.", false)
+        SetTextOptionValueST("starting backup...")
+        manager.BackupAllModValues()
+	endEvent
+
+	event OnDefaultST()
+		SetTextOptionValueST("Press to backup")
+	endEvent
+
+	event OnHighlightST()
+		SetInfoText("(backup button)")
 	endEvent
 endState
 

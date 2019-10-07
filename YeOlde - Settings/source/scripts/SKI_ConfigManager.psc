@@ -1,5 +1,9 @@
 scriptname SKI_ConfigManager extends SKI_QuestBase hidden 
 
+import JsonUtil
+import PapyrusUtil
+import MiscUtil
+
 ; SCRIPT VERSION ----------------------------------------------------------------------------------
 ;
 ; History
@@ -206,6 +210,27 @@ event OnMenuClose(string a_menuName)
 	_activeConfig = none
 endEvent
 
+; YeOlde
+function ForceModSelect(int modIndex)
+	if (modIndex > -1)
+
+		; YeOlde: Since we reallocate buffers, there's no need to clear them.
+		; We can clean the buffers of the previous menu now
+		if (_activeConfig != none)
+			_activeConfig.CloseConfig()
+		endIf
+
+		_activeConfig = _modConfigs[modIndex]
+		if (_activeConfig != none)
+			; _activeConfig.OpenConfig(false)
+			_activeConfig.OpenConfig()
+		else
+			Error("ForceModSelect -> no active config")
+		endif
+		UI.InvokeBool(JOURNAL_MENU, MENU_ROOT + ".unlock", true)
+	endIf
+endfunction
+
 event OnModSelect(string a_eventName, string a_strArg, float a_numArg, Form a_sender)
 	int configIndex = a_numArg as int
 	if (configIndex > -1)
@@ -220,6 +245,14 @@ event OnModSelect(string a_eventName, string a_strArg, float a_numArg, Form a_se
 	endIf
 	UI.InvokeBool(JOURNAL_MENU, MENU_ROOT + ".unlock", true)
 endEvent
+
+; YeOlde
+function ForcePageSelect(int a_index, string a_pageName)
+	Log("ForcePageSelect -> str:" + a_pageName + ", index:" + a_index)
+	_activeConfig.ForceSetPage(a_pageName, a_index)
+	; YeOlde: Leave here or remove???
+	UI.InvokeBool(JOURNAL_MENU, MENU_ROOT + ".unlock", true)
+endfunction
 
 event OnPageSelect(string a_eventName, string a_strArg, float a_numArg, Form a_sender)
 	string page = a_strArg
@@ -311,6 +344,178 @@ endEvent
 ; FUNCTIONS ---------------------------------------------------------------------------------------
 
 ; YeOlde
+function BackupAllModValues()
+	Log("BackupAllModValues -> START")
+
+	; We unhide all mods before starting
+	; int tmpIndex = 0
+	; while (tmpIndex < 128)
+	; 	_modConfigs[tmpIndex] = _allMods[tmpIndex]
+	; 	_modNames[tmpIndex] = _allNames[tmpIndex]
+	; 	_isModEnabled[tmpIndex] = true
+	; 	tmpIndex += 1
+	; endwhile
+
+	int i = 0
+	while (i<_modConfigs.Length)
+		if(_modConfigs[i] != none && _modConfigs[i].ModName != "YeOlde - Settings")
+			Log("YeOlde_JSON:ModName -> " + _modConfigs[i].ModName)
+			
+			ForceModSelect(i)
+
+			if (_modConfigs[i].Pages.Length == 0)
+				Log("  YeOlde_JSON:Page -> " + "(none)")
+				; only the default page.	
+				_modConfigs[i].BackupPageOptions()				
+			else				
+				int j = 0
+				while (j < _modConfigs[i].Pages.Length)
+					Log("  YeOlde_JSON:Page -> " + _modConfigs[i].Pages[j])
+
+					ForcePageSelect(j, _modConfigs[i].Pages[j])
+					_modConfigs[i].BackupPageOptions()
+
+					j += 1
+				endwhile
+			endif
+		endif
+		i += 1
+	endwhile
+
+	Input.TapKey(15) ; press TAP to exit current menu
+	
+	Log("BackupAllModValues -> BACKUP COMPLETED")
+endfunction
+
+; YeOlde
+function ResetMCMBackupFile(string filename)
+	Log("ResetMCMBackupFile() -> " + filename)
+	JsonUtil.ClearAll(filename)
+	JsonUtil.Save(filename)
+endfunction
+
+; YeOlde
+function ImportAllMcmMenuValues(string filename)	
+	Log("ImportAllMcmMenuValues() -> " + filename)
+	string[] mods = JsonUtil.PathMembers(filename, ".")
+
+	int i = 0
+	while (i< mods.length)
+		ImportMCMMenuValues(filename, mods[i])
+		i += 1
+	endWhile
+
+	Input.TapKey(15) ; press TAP to exit current menu
+	
+	Log("ImportAllMcmMenuValues -> IMPORT COMPLETED")
+
+endfunction
+
+
+; YeOlde
+function ImportMCMMenuValues(string filename, string modname)
+	Log("  ImportMCMMenuValues() -> " + modname)
+	int modIndex = FindModIndexByName(modname)
+	
+	if (modIndex > -1)
+		SKI_ConfigBase currentMod = _allMods[modIndex]
+
+		; Open mod page
+		ForceModSelect(modIndex)
+		string[] pages = JsonUtil.PathMembers(filename, "." + modname)
+		
+		int i = 0
+		while (i< pages.length)
+			Log("    PageNames -> " + pages[i])
+			string pageName = pages[i]
+			int pageIndex = -2
+
+			if (pageName == "(none)")
+				pageName = ""
+				pageIndex = -1
+			else
+				int j = 0
+				while (j < currentMod.Pages.Length)
+					if (currentMod.Pages[j] == pageName)
+						pageIndex = j
+
+						; leave while loop
+						j = currentMod.Pages.Length
+					endif
+					j += 1
+				endwhile
+			endif
+			if (pageIndex > -2)
+				; The page exist
+				ForcePageSelect(pageIndex, pageName)
+
+				string[] options = JsonUtil.PathMembers(filename, "." + modname + "." + pages[i])
+
+				int k = 0
+				while (k < options.Length)
+					string jsonPath = "." + modname + "." + pages[i] + "." + options[k]
+					Log("        json path -> " + jsonPath)
+					string[] values = JsonUtil.PathStringElements(filename, jsonPath)					
+					int index = options[k] as int
+					int optType = values[0] as int
+					string strValue = values[1]
+					int intValue = values[2] as int
+					float floatValue = values[3] as float
+					string stateValue = values[4]
+					
+					if (optType == currentMod.OPTION_TYPE_TEXT)
+						currentMod.ForceTextOption(index, strValue, stateValue)
+
+					elseif (optType == currentMod.OPTION_TYPE_TOGGLE)
+						currentMod.ForceToggleOption(index, intValue, stateValue)
+
+					elseif (optType == currentMod.OPTION_TYPE_SLIDER)
+						currentMod.ForceSliderOptionValue(index, pageIndex, floatValue, stateValue)
+
+					elseif (optType == currentMod.OPTION_TYPE_MENU)
+						currentMod.ForceMenuIndex(index, intValue, stateValue)
+
+					elseif (optType == currentMod.OPTION_TYPE_COLOR)
+						currentMod.ForceColorValue(index, intValue, stateValue)
+
+					elseif (optType == currentMod.OPTION_TYPE_KEYMAP)
+						currentMod.ForceRemapKey(index, intValue, stateValue)
+
+						; OnKeymapChange("", "", intValue, none)
+					elseif (optType == currentMod.OPTION_TYPE_INPUT)
+						currentMod.ForceInputText(index, pageIndex, strValue, stateValue)
+
+					else
+						; Header or empty
+						Log("        optType value not valid -> " + optType)
+					endif
+					k += 1
+				endwhile
+			else				
+				Log("      Page not found -> " + pages[i])
+			endif
+
+			i += 1
+		endWhile
+	endif
+endfunction
+
+
+; YeOlde
+int function FindModIndexByName(string a_modName)
+	int i = 0
+	while (i < _modNames.length)
+		if (_modNames[i] == a_modName)
+			return i
+		endIf			
+		i += 1
+	endWhile
+
+	return -1
+endFunction
+
+
+; YeOlde
 int function FindModIndex(SKI_ConfigBase a_menu)
 	int i = 0
 	while (i < _allMods.length)
@@ -325,9 +530,10 @@ endFunction
 
 
 ; YeOlde
-int function EnableModByName(string a_modName)
-	Debug.Trace("yeolde_SKI_ConfigManager::EnableModByName -> " + a_modName)
+int function EnableModByName(string a_modName, bool a_updateUI = true)
+	Debug.Trace("EnableModByName -> " + a_modName)
 	; We aren't supposed to add/remove menu while in menu mode. This is an exception.
+	string lastState = GetState()
 	GotoState("")
 	SKI_ConfigBase menu = none
 
@@ -342,25 +548,27 @@ int function EnableModByName(string a_modName)
 	endWhile
 
 	if (menu == none)		
-		Debug.Trace("yeolde_SKI_ConfigManager::EnableModByName -> Can't find menu '" + a_modName + "'")
+		Debug.Trace("EnableModByName -> Can't find menu '" + a_modName + "'")
 		return -1
 	endif
 
-	int result = EnableMod(menu, a_modName)
-	GotoState("BUSY")	
+	int result = EnableMod(menu, a_modName, a_updateUI)
+	GotoState(lastState)	
     return result
 endFunction
 
 
 ; YeOlde
-int function EnableMod(SKI_ConfigBase a_menu, string a_modName)
-    Debug.Trace("yeolde_SKI_ConfigManager::EnableMod -> " + a_modName)
+int function EnableMod(SKI_ConfigBase a_menu, string a_modName, bool a_updateUI = true)
+    Debug.Trace("EnableMod() -> " + a_modName)
 	
 	int configID = RegisterMod(a_menu, a_modName)
 	
-	GotoState("BUSY")	
-	UI.InvokeStringA(JOURNAL_MENU, MENU_ROOT + ".setModNames", _modNames);
-	GotoState("")
+	if (a_updateUI)
+		GotoState("BUSY")	
+		UI.InvokeStringA(JOURNAL_MENU, MENU_ROOT + ".setModNames", _modNames);
+		GotoState("")
+	endif
     
 	RegisterForSingleUpdate(2)
     return configID
@@ -369,8 +577,9 @@ endFunction
 
 ; YeOlde
 int function DisableModByName(string a_modName)
-	Debug.Trace("yeolde_SKI_ConfigManager::DisableModByName -> " + a_modName)
+	Debug.Trace("DisableModByName() -> " + a_modName)
 	; We aren't supposed to add/remove menu while in menu mode. This is an exception.
+	string lastState = GetState()
 	GotoState("")
 	SKI_ConfigBase menu = none
 
@@ -385,12 +594,12 @@ int function DisableModByName(string a_modName)
 	endWhile
 
 	if (menu == none)		
-		Debug.Trace("yeolde_SKI_ConfigManager::DisableModByName -> Can't find menu '" + a_modName + "'")
+		Debug.Trace("DisableModByName() -> Can't find menu '" + a_modName + "'")
 		return -1
 	endif
 	
 	int result = DisableMod(menu, a_modName)
-	GotoState("BUSY")
+	GotoState(lastState)
 
     return result
 endFunction
@@ -398,15 +607,13 @@ endFunction
 
 ; YeOlde
 int function DisableMod(SKI_ConfigBase a_menu, string a_modName)
-	Debug.Trace("yeolde_SKI_ConfigManager::DisableMod -> " + a_modName)
+	Debug.Trace("DisableMod() -> " + a_modName)
 
 	int index = FindModIndex(a_menu)
 	_isModEnabled[index] = false
 	_modConfigs[index] = none
 	_modNames[index] = ""
-	
-	; int configID = UnregisterMod(a_menu)
-	
+		
 	UI.InvokeStringA(JOURNAL_MENU, MENU_ROOT + ".setModNames", _modNames);
 	GotoState("")
 	
@@ -498,11 +705,12 @@ endFunction
 ; YeOlde
 function ForceResetFromMCMMenu()	
 	; We aren't supposed to add/remove MSM menu while in menu mode. This is an exception.	
+	string lastState = GetState()
 	GotoState("")
 	ForceReset()
 
 	; Since we are in menu mode, we set back the BUSY state.
-	GotoState("BUSY")
+	GotoState(lastState)
 endfunction
 
 ; @interface
@@ -510,7 +718,8 @@ function ForceReset()
 	Log("Forcing config manager reset...")
 	SendModEvent("SKICP_configManagerReset")
 
-	GotoState("BUSY")
+	string lastState = GetState()
+	GotoState("")
 
 	int i = 0
 	while (i < _modConfigs.length)
@@ -524,7 +733,7 @@ function ForceReset()
 	_curConfigID = 0
 	_configCount = 0
 
-	GotoState("")
+	GotoState(lastState)
 
 	SendModEvent("SKICP_configManagerReady")
 endFunction
@@ -572,17 +781,13 @@ int function NextID()
 	return _curConfigID
 endFunction
 
-function Log(string a_msg)
-	Debug.Trace(self + ": " + a_msg)
-endFunction
-
-; Only for Skyrim VR (won't be used in SE)
+; YeOlde: Only for Skyrim VR (won't be used in SE)
 function OnInputSelect(String a_eventName, String a_strArg, Float a_numArg, Form a_sender)
 	Int optionIndex = a_numArg as Int
 	_activeConfig.RequestInputDialogData(optionIndex)
 endFunction
 
-; Only for Skyrim VR (won't be used in SE)
+; YeOlde: Only for Skyrim VR (won't be used in SE)
 function OnInputAccept(String a_eventName, String a_strArg, Float a_numArg, Form a_sender)
 	_activeConfig.SetInputText(a_strArg)
 	ui.InvokeBool(self.JOURNAL_MENU, self.MENU_ROOT + ".unlock", true)
@@ -591,7 +796,7 @@ endFunction
 ; STATES ---------------------------------------------------------------------------------------
 
 state BUSY
-	int function EnableMod(SKI_ConfigBase a_menu, string a_modName)
+	int function EnableMod(SKI_ConfigBase a_menu, string a_modName, bool a_updateUI = true)
 		return -2
 	endFunction
 
@@ -615,3 +820,15 @@ state BUSY
 		Log("CleanUp called while in busy state")
 	endFunction
 endState
+
+
+; DEBUG  ----------------------------------------------------------------------------------------
+
+
+function Log(string a_msg)
+	Debug.Trace(self + ": " + a_msg)
+endFunction
+
+function Error(string a_msg)
+	Debug.Trace(self + " ERROR: " +  a_msg)
+endFunction
