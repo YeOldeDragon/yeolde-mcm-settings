@@ -103,9 +103,9 @@ event OnPageReset(string a_page)
     elseif a_page == "Import/export settings"
         SetCursorFillMode(TOP_TO_BOTTOM)
         AddHeaderOption("Import / Export MCM configurations")
-        AddTextOptionST("MCMValuesBackup", "Backup your MCM config", "Press to backup")  
+        AddTextOptionST("MCMValuesBackup", "Backup your configs", "Press to backup")  
         AddEmptyOption()
-        AddTextOptionST("ImportMCMValues", "Import MCM menu values", "Press to import") 
+        AddTextOptionST("ImportMCMValues", "Import last backup", "Press to import") 
 
         SetCursorPosition(1)
         AddHeaderOption("Debug")
@@ -182,18 +182,37 @@ event OnOptionDefault(int a_option)
 endEvent
 
 
+function UpdateBackupButtonText(string msg)
+	SetTextOptionValueST(msg, false, "MCMValuesBackup")
+endfunction
+
+
+function UpdateImportButtonText(string msg)
+	SetTextOptionValueST(msg, false, "ImportMCMValues")
+endfunction
+
+
+function UpdateInfoMsg(string msg)
+	ForceInfoText(msg)
+endfunction
+
 
 function SetYeOldeBackupValues(string jsonPath, int index, int optionType, string strValue, int intValue, float floatValue)
     ; Since we are managing backups, we don't backup ourself for the moment.
     ; TODO: Backup ourself but backup/import buttons.
 endfunction
 
+
 state ImportMCMValues
     event OnSelectST()
         
-        ShowMessage("Your menus will go wild while importing. Please wait until it goes back to the MCM menu main page.", false)
-        SetTextOptionValueST("importing...")
-        manager.ImportAllMcmMenuValues(OPTIONS_DEFAULT_BACKUP_FILE)
+        bool continue = ShowMessage("Press the button and wait until the import is completed.")
+        if (continue)
+            SetTextOptionValueST("working...")
+            manager.ImportAllMcmMenuValues(self, OPTIONS_DEFAULT_BACKUP_FILE)
+            ShowMessage("Import completed.", false)
+            Input.TapKey(15) ; press TAB to exit current menu
+        endif
 	endEvent
 
 	event OnDefaultST()
@@ -207,24 +226,23 @@ endState
 
 state ClearMCMBackup
     event OnSelectST()
-        SetTextOptionValueST("deleting values...")
+        SetTextOptionValueST("deleting backup...")
         manager.ResetMCMBackupFile(OPTIONS_DEFAULT_BACKUP_FILE)
+		SetTextOptionValueST("Press to clear")
 	endEvent
 
 	event OnDefaultST()
-		SetTextOptionValueST("Press to import")
+		SetTextOptionValueST("Press to clear")
 	endEvent
 
 	event OnHighlightST()
-		SetInfoText("Press the button and wait until I do the magic stuff!")
+		SetInfoText("Press the button to delete your MCM configs backup")
 	endEvent
 endState
 
 state ForceMCMReset
     event OnSelectST()
         SetTextOptionValueST("reseting...")
-        
-        ; ShowMessage("Import is completed, please exit menu to complete the update.", false)
         manager.ForceResetFromMCMMenu()
 		SetTextOptionValueST("Press to reset")
 	endEvent
@@ -240,9 +258,13 @@ endState
 
 state MCMValuesBackup
     event OnSelectST()
-        ShowMessage("Your menus will go wild while creating the backup. Please wait until it goes back to the MCM menu main page.", false)
-        SetTextOptionValueST("starting backup...")
-        manager.BackupAllModValues()
+        bool continue = ShowMessage("Please wait until the backup is completed.")
+        if (continue)
+            SetTextOptionValueST("working...")
+            manager.BackupAllModValues(self)        
+            ShowMessage("Backup completed.", false)
+            Input.TapKey(15) ; press TAB to exit current menu
+        endif
 	endEvent
 
 	event OnDefaultST()

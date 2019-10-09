@@ -6,9 +6,26 @@ import PapyrusUtil
 ; YEOLDE CONSNTANTS & VARIABLES
 
 string property 	OPTIONS_DEFAULT_BACKUP_FILE = "../YeOlde-Settings/mcm_backup.json" autoReadonly
-string				_fileName
+string				_fileName				= ""
+yeolde_mcm_settings _settings_mod
 bool 				_configOpened = false
 string[] 			_currentMenuOptions   ; Keep current menu options
+
+string				_bak_currentPage		= ""
+int					_bak_currentPageNum		= 0	
+
+bool 				_isBackupMode = false
+int[]				_bak_optionFlagsBuf					; byte 1 type, byte 2 flags
+string[]			_bak_textBuf
+string[]			_bak_strValueBuf
+float[]				_bak_numValueBuf
+string[]			_bak_stateOptionMap
+
+int					_bak_cursorPosition		= 0
+int					_bak_cursorFillMode		= 1	
+
+int 				_bak_optionType = 0
+string[] 			_bak_values 
 
 ; CONSTANTS ---------------------------------------------------------------------------------------
 
@@ -321,6 +338,13 @@ function SetTitleText(string a_text)
 endFunction
 
 ; @interface
+function ForceInfoText(string a_text)
+	_infoText = a_text
+	
+	UI.InvokeString(JOURNAL_MENU, MENU_ROOT + ".setInfoText", _infoText)
+endFunction
+
+; @interface
 function SetInfoText(string a_text)
 	_infoText = a_text
 endFunction
@@ -328,14 +352,22 @@ endFunction
 ; @interface
 function SetCursorPosition(int a_position)
 	if (a_position < 128)
-		_cursorPosition = a_position
+		if (_isBackupMode)
+			_bak_cursorPosition = a_position
+		else
+			_cursorPosition = a_position
+		endif
 	endIf
 endFunction
 
 ; @interface
 function SetCursorFillMode(int a_fillMode)
 	if (a_fillMode == LEFT_TO_RIGHT || a_fillMode == TOP_TO_BOTTOM)
-		_cursorFillMode = a_fillMode
+		if (_isBackupMode)
+			_bak_cursorFillMode = a_fillMode
+		else
+			_cursorFillMode = a_fillMode
+		endif
 	endIf
 endFunction
 
@@ -411,6 +443,10 @@ endFunction
 
 ; @interface
 function LoadCustomContent(string a_source, float a_x = 0.0, float a_y = 0.0)
+	if (_isBackupMode)
+		return
+	endif
+	
 	float[] params = new float[2]
 	params[0] = a_x
 	params[1] = a_y
@@ -420,11 +456,19 @@ endFunction
 
 ; @interface
 function UnloadCustomContent()
+	if (_isBackupMode)
+		return
+	endif
+
 	UI.Invoke(JOURNAL_MENU, MENU_ROOT + ".unloadCustomContent")
 endFunction
 
 ; @interface
 function SetOptionFlags(int a_option, int a_flags, bool a_noUpdate = false)
+	if (_isBackupMode)
+		return
+	endif
+
 	if (_state == STATE_RESET)
 		Error("Cannot set option flags while in OnPageReset(). Pass flags to AddOption instead")
 		return
@@ -450,7 +494,13 @@ endFunction
 
 ; @interface
 function SetTextOptionValue(int a_option, string a_value, bool a_noUpdate = false)
-	Log("SetTextOptionValue")
+	Log("SetTextOptionValue(" + a_option + ", " + a_value + ") -> BackupMode: " + _isBackupMode)
+	if (_isBackupMode)
+		int index = a_option % 0x100
+		SetOptionStrValue(index, a_value, a_noUpdate)
+		return
+	endif
+
 	int index = a_option % 0x100
 	int type = _optionFlagsBuf[index] % 0x100
 
@@ -469,6 +519,12 @@ endFunction
 
 ; @interface
 function SetToggleOptionValue(int a_option, bool a_checked, bool a_noUpdate = false)
+	if (_isBackupMode)
+		int index = a_option % 0x100
+		SetOptionNumValue(index, a_checked as int, a_noUpdate)
+		return
+	endif
+
 	int index = a_option % 0x100
 	int type = _optionFlagsBuf[index] % 0x100
 
@@ -485,20 +541,14 @@ function SetToggleOptionValue(int a_option, bool a_checked, bool a_noUpdate = fa
 	SetOptionNumValue(index, a_checked as int, a_noUpdate)
 endfunction
 
-function SetYeOldeBackupValues(string jsonPath, int index, int optionType, string strValue, int intValue, float floatValue)
-	Log("SetYeOldeBackupValues(" + jsonPath + ", " + index + ", " + optionType + ", " + strValue + ", " + intValue + ", " + floatValue + ")")
-	string[] values = new string[5]
-	values[0] = optionType as string
-	values[1] = strValue
-	values[2] = intValue as string
-	values[3] = floatValue as string
-	values[4] = _stateOptionMap[index]
-
-	JsonUtil.SetPathStringArray(_fileName, jsonPath, values)
-endfunction
-
 ; @interface
 function SetSliderOptionValue(int a_option, float a_value, string a_formatString = "{0}", bool a_noUpdate = false)
+	if (_isBackupMode)
+		int index = a_option % 0x100
+		SetOptionValues(index, a_formatString, a_value, a_noUpdate)
+		Return
+	endif
+
 	int index = a_option % 0x100
 	int type = _optionFlagsBuf[index] % 0x100
 
@@ -517,6 +567,12 @@ endFunction
 
 ; @interface
 function SetMenuOptionValue(int a_option, string a_value, bool a_noUpdate = false)
+	if (_isBackupMode)
+		int index = a_option % 0x100
+		SetOptionStrValue(index, a_value, a_noUpdate)
+		return
+	endif
+
 	Log("SetMenuOptionValue(" + a_option + ", " + a_value + ")")
 	int index = a_option % 0x100
 	int type = _optionFlagsBuf[index] % 0x100
@@ -536,6 +592,12 @@ endFunction
 
 ; @interface
 function SetColorOptionValue(int a_option, int a_color, bool a_noUpdate = false)
+	if (_isBackupMode)
+		int index = a_option % 0x100
+		SetOptionNumValue(index, a_color, a_noUpdate)
+		return
+	endif
+
 	int index = a_option % 0x100
 	int type = _optionFlagsBuf[index] % 0x100
 
@@ -554,6 +616,12 @@ endFunction
 
 ; @interface
 function SetKeyMapOptionValue(int a_option, int a_keyCode, bool a_noUpdate = false)
+	if (_isBackupMode)
+		int index = a_option % 0x100
+		SetOptionNumValue(index, a_keyCode, a_noUpdate)
+		return
+	endif
+
 	int index = a_option % 0x100
 	int type = _optionFlagsBuf[index] % 0x100
 
@@ -655,6 +723,9 @@ endFunction
 
 ; @interface
 function SetSliderDialogStartValue(float a_value)
+	if (_isBackupMode)
+		return
+	endif
 	if (_state != STATE_SLIDER)
 		Error("Cannot set slider dialog params while outside OnOptionSliderOpen()")
 		return
@@ -665,6 +736,10 @@ endFunction
 
 ; @interface
 function SetSliderDialogDefaultValue(float a_value)
+	if (_isBackupMode)
+		return
+	endif
+
 	if (_state != STATE_SLIDER)
 		Error("Cannot set slider dialog params while outside OnOptionSliderOpen()")
 		return
@@ -675,6 +750,10 @@ endFunction
 
 ; @interface
 function SetSliderDialogRange(float a_minValue, float a_maxValue)
+	if (_isBackupMode)
+		return
+	endif
+
 	if (_state != STATE_SLIDER)
 		Error("Cannot set slider dialog params while outside OnOptionSliderOpen()")
 		return
@@ -686,6 +765,10 @@ endFunction
 
 ; @interface
 function SetSliderDialogInterval(float a_value)
+	if (_isBackupMode)
+		return
+	endif
+
 	if (_state != STATE_SLIDER)
 		Error("Cannot set slider dialog params while outside OnOptionSliderOpen()")
 		return
@@ -696,6 +779,10 @@ endFunction
 
 ; @interface
 function SetMenuDialogStartIndex(int a_value)
+	if (_isBackupMode)
+		return
+	endif
+
 	if (_state != STATE_MENU)
 		Error("Cannot set menu dialog params while outside OnOptionMenuOpen()")
 		return
@@ -706,6 +793,10 @@ endFunction
 
 ; @interface
 function SetMenuDialogDefaultIndex(int a_value)
+	if (_isBackupMode)
+		return
+	endif
+
 	if (_state != STATE_MENU)
 		Error("Cannot set menu dialog params while outside OnOptionMenuOpen()")
 		return
@@ -716,6 +807,11 @@ endFunction
 
 ; @interface
 function SetMenuDialogOptions(string[] a_options)
+	if (_isBackupMode)
+		_currentMenuOptions = a_options
+		return
+	endif
+
 	if (_state != STATE_MENU)
 		Error("Cannot set menu dialog params while outside OnOptionMenuOpen()")
 		return
@@ -729,6 +825,10 @@ endFunction
 
 ; @interface
 function SetColorDialogStartColor(int a_color)
+	if (_isBackupMode)
+		return
+	endif
+
 	if (_state != STATE_COLOR)
 		Error("Cannot set color dialog params while outside OnOptionColorOpen()")
 		return
@@ -739,6 +839,10 @@ endFunction
 
 ; @interface
 function SetColorDialogDefaultColor(int a_color)
+	if (_isBackupMode)
+		return
+	endif
+
 	if (_state != STATE_COLOR)
 		Error("Cannot set color dialog params while outside OnOptionColorOpen()")
 		return
@@ -783,29 +887,26 @@ function Error(string a_msg)
 	Debug.Trace(self + " ERROR: " +  a_msg)
 endFunction
 
-function OpenConfig(bool updateUI = true)
+function OpenConfig()
+
 	; Alloc
 	_optionFlagsBuf	= new int[128]
 	_textBuf		= new string[128]
 	_strValueBuf	= new string[128]
 	_numValueBuf	= new float[128]
 	_stateOptionMap	= new string[128]
-	_configOpened = true
 
 	SetPage("", -1)
 
 	OnConfigOpen()
 
-	if (updateUI)
-		UI.InvokeStringA(JOURNAL_MENU, MENU_ROOT + ".setPageNames", Pages)
-	endif
+	UI.InvokeStringA(JOURNAL_MENU, MENU_ROOT + ".setPageNames", Pages)
 endFunction
 
 function CloseConfig()
 	OnConfigClose()
 	ClearOptionBuffers()
 	_waitForMessage = false
-	_configOpened = false
 
 	; Free
 	_optionFlagsBuf	= new int[1]
@@ -816,27 +917,16 @@ function CloseConfig()
 endFunction
 
 ; YeOlde
-function ForceSetPage(string a_page, int a_index)
+function FakeSetPage(string a_page, int a_index)
 	Log("ForceSetPage(" + a_page + ", " + a_index + ")")
-	_currentPage = a_page
-	_currentPageNum = 1+a_index
-
-	if (a_page != "")
-		SetTitleText(a_page)
-	else
-		SetTitleText(ModName)
-	endIf
+	_bak_currentPage = a_page
+	_bak_currentPageNum = 1+a_index
 
 	ClearOptionBuffers()
 	
-	_cursorPosition	= 0
-	_cursorFillMode	= LEFT_TO_RIGHT
-	_state = STATE_RESET
+	; _state = STATE_RESET
 	OnPageReset(a_page)
-
-	_state = STATE_DEFAULT
-	; YeOlde Leave here or remove???
-	WriteOptionBuffers()
+	; _state = STATE_DEFAULT
 endFunction
 
 function SetPage(string a_page, int a_index)
@@ -858,6 +948,26 @@ function SetPage(string a_page, int a_index)
 endFunction
 
 int function AddOption(int a_optionType, string a_text, string a_strValue, float a_numValue, int a_flags)
+	if (_isBackupMode)
+		int pos = _bak_cursorPosition
+		if (pos == -1)
+			return -1 ; invalid
+		endIf
+	
+		_bak_optionFlagsBuf[pos] = a_optionType + a_flags * 0x100
+		_bak_textBuf[pos] = a_text
+		_bak_strValueBuf[pos] = a_strValue
+		_bak_numValueBuf[pos] = a_numValue
+	
+		; Just use numerical value of fill mode
+		_bak_cursorPosition += _bak_cursorFillMode
+		if (_bak_cursorPosition >= 128)
+			_bak_cursorPosition = -1
+		endIf
+		
+		return pos
+	endif
+	
 	if (_state != STATE_RESET)
 		Error("Cannot add option " + a_text + " outside of OnPageReset()")
 		return -1
@@ -885,6 +995,16 @@ int function AddOption(int a_optionType, string a_text, string a_strValue, float
 endFunction
 
 function AddOptionST(string a_stateName, int a_optionType, string a_text, string a_strValue, float a_numValue, int a_flags)
+	if (_isBackupMode)
+		int index = AddOption(a_optionType, a_text, a_strValue, a_numValue, a_flags)
+		if (index < 0)
+			return
+		endIf
+		
+		_bak_stateOptionMap[index] = a_stateName
+		return
+	endif
+
 	if (_stateOptionMap.find(a_stateName) != -1)
 		Error("State option name " + a_stateName + " is already in use")
 		return
@@ -911,6 +1031,10 @@ int function GetStateOptionIndex(string a_stateName)
 	if (a_stateName == "")
 		return -1
 	endIf
+
+	if(_isBackupMode)
+		return _bak_stateOptionMap.find(a_stateName)
+	endif
 
 	return _stateOptionMap.find(a_stateName)
 endFunction
@@ -939,6 +1063,25 @@ function WriteOptionBuffers()
 endFunction
 
 function ClearOptionBuffers()
+	if (_isBackupMode)
+		int t = OPTION_TYPE_EMPTY
+		int i = 0
+		while (i < 128)
+			_bak_optionFlagsBuf[i] = t
+			_bak_textBuf[i] = ""
+			_bak_strValueBuf[i] = ""
+			_bak_numValueBuf[i] = 0
+
+			; Also clear state map as it's tied to the buffers
+			_bak_stateOptionMap[i] = ""
+			i += 1
+		endWhile
+
+		_bak_cursorPosition	= 0
+		_bak_cursorFillMode	= LEFT_TO_RIGHT
+		return
+	endif
+
 	int t = OPTION_TYPE_EMPTY
 	int i = 0
 	while (i < 128)
@@ -957,6 +1100,11 @@ function ClearOptionBuffers()
 endFunction
 
 function SetOptionStrValue(int a_index, string a_strValue, bool a_noUpdate)
+	if(_isBackupMode)
+		_bak_strValueBuf[a_index] = a_strValue
+		return
+	endif
+
 	if (_state == STATE_RESET)
 		Error("Cannot modify option data while in OnPageReset()")
 		return
@@ -965,7 +1113,6 @@ function SetOptionStrValue(int a_index, string a_strValue, bool a_noUpdate)
 	string menu = JOURNAL_MENU
 	string root = MENU_ROOT
 	
-	; Log("SetOptionStrValue(" + a_index + ", " + a_strValue + ")")
 	_strValueBuf[a_index] = a_strValue
 
 	UI.SetInt(menu, root + ".optionCursorIndex", a_index)
@@ -977,6 +1124,12 @@ endFunction
 
 function SetOptionNumValue(int a_index, float a_numValue, bool a_noUpdate)
 	Log("SetOptionNumValue(" + a_index + ", " + a_numValue + ")")
+	
+	if(_isBackupMode)
+		_bak_numValueBuf[a_index] = a_numValue
+		return
+	endif
+
 	if (_state == STATE_RESET)
 		Error("Cannot modify option data while in OnPageReset()")
 		return
@@ -985,7 +1138,6 @@ function SetOptionNumValue(int a_index, float a_numValue, bool a_noUpdate)
 	string menu = JOURNAL_MENU
 	string root = MENU_ROOT
 
-	; Log("SetOptionNumValue(" + a_index + ", " + a_numValue + ")")
 	_numValueBuf[a_index] = a_numValue
 
 	UI.SetInt(menu, root + ".optionCursorIndex", a_index)
@@ -996,6 +1148,13 @@ function SetOptionNumValue(int a_index, float a_numValue, bool a_noUpdate)
 endFunction
 
 function SetOptionValues(int a_index, string a_strValue, float a_numValue, bool a_noUpdate)
+	
+	if(_isBackupMode)
+		_bak_numValueBuf[a_index] = a_numValue
+		_bak_strValueBuf[a_index] = a_strValue
+		return
+	endif
+
 	if (_state == STATE_RESET)
 		Error("Cannot modify option data while in OnPageReset()")
 		return
@@ -1038,6 +1197,19 @@ function RequestSliderDialogData(int a_index)
 
 	UI.InvokeFloatA(JOURNAL_MENU, MENU_ROOT + ".setSliderDialogParams", _sliderParams)
 endFunction
+
+; YeOlde
+function FakeRequestMenuDialogData(int a_index)
+	string optionState = _bak_stateOptionMap[a_index]
+	if (optionState != "")
+		string oldState = GetState()
+		gotoState(optionState)
+		OnMenuOpenST()
+		gotoState(oldState)
+	else
+		OnOptionMenuOpen(a_index + _bak_currentPageNum * 0x100)
+	endIf
+endfunction
 
 function RequestMenuDialogData(int a_index)
 	_activeOption = a_index + _currentPageNum * 0x100
@@ -1088,15 +1260,15 @@ function RequestColorDialogData(int a_index)
 endFunction
 
 ; YeOlde
-function ForceSliderOptionValue(int a_index, int a_pageNum, float a_value, string a_stateValue)
-	Log("ForceSliderOptionValue(" + a_index + ", " + a_pageNum + ", " + a_value + ", " + a_stateValue + ")")
+function ForceSliderOptionValue(int a_index, float a_value, string a_stateValue)
+	Log("ForceSliderOptionValue(" + a_index + ", " + a_value + ", " + a_stateValue + ")")
 	if (a_stateValue != "")
 		string oldState = GetState()
 		gotoState(a_stateValue)
 		OnSliderAcceptST(a_value)
 		gotoState(oldState)
 	else
-		OnOptionSliderAccept(_activeOption, a_value)
+		OnOptionSliderAccept(a_index + _bak_currentPageNum * 0x100, a_value)
 	endIf
 endfunction
 
@@ -1124,9 +1296,8 @@ function ForceMenuIndex(int a_optionIndex, int a_menuIndex, string a_stateValue)
 
 		gotoState(oldState)
 	else
-		OnOptionMenuAccept(a_optionIndex + _currentPageNum * 0x100, a_menuIndex)
+		OnOptionMenuAccept(a_optionIndex + _bak_currentPageNum * 0x100, a_menuIndex)
 	endIf
-	_activeOption = -1
 endFunction
 
 function SetMenuIndex(int a_index)
@@ -1155,9 +1326,8 @@ function ForceColorValue(int a_optionIndex, int a_color, string a_stateValue)
 
 		gotoState(oldState)
 	else
-		OnOptionColorAccept(_activeOption, a_color)
+		OnOptionColorAccept(a_optionIndex + _bak_currentPageNum * 0x100, a_color)
 	endIf
-	_activeOption = -1
 endFunction
 
 function SetColorValue(int a_color)
@@ -1177,9 +1347,9 @@ endFunction
 ; YeOlde
 function ForceTextOption(int a_index, string a_strValue, string a_stateValue)
 	Log("ForceTextOption: strValue: " + a_strValue)
-	string originalValue = _strValueBuf[a_index]
+	string originalValue = _bak_strValueBuf[a_index]
 	if( originalValue != a_strValue)
-		while (_strValueBuf[a_index] != a_strValue)
+		while (_bak_strValueBuf[a_index] != a_strValue)
 			; Log("ForceTextOption loop - _strValueBuf: " + _strValueBuf[a_index] + ", a_strValue: " + a_strValue)
 			if (a_stateValue != "")
 				string oldState = GetState()
@@ -1187,7 +1357,7 @@ function ForceTextOption(int a_index, string a_strValue, string a_stateValue)
 				OnSelectST()
 				gotoState(oldState)
 			else
-				int option = a_index + _currentPageNum * 0x100
+				int option = a_index + _bak_currentPageNum * 0x100
 				OnOptionSelect(option)
 			endIf
 		endwhile
@@ -1196,16 +1366,15 @@ endFunction
 
 ; YeOlde
 function ForceToggleOption(int a_index, int a_numValue, string a_stateValue)
-	Log("ForceToggleOption: index: " + a_index + ", a_numValue: " + a_numValue + ", _numValueBuf: " + _numValueBuf[a_index])
-	if (_numValueBuf[a_index] != a_numValue)
+	Log("ForceToggleOption: index: " + a_index + ", a_numValue: " + a_numValue + ", numValueBuf: " + _bak_numValueBuf[a_index])
+	if (_bak_numValueBuf[a_index] != a_numValue)
 		if (a_stateValue != "")
 			string oldState = GetState()
 			gotoState(a_stateValue)
 			OnSelectST()
 			gotoState(oldState)
 		else
-			int option = a_index + _currentPageNum * 0x100
-			OnOptionSelect(option)
+			OnOptionSelect(a_index + _bak_currentPageNum * 0x100)
 		endIf
 	endif
 endFunction
@@ -1225,62 +1394,250 @@ function SelectOption(int a_index)
 endFunction
 
 ; YeOlde
+function ImportPagesOptionsFromFile(yeolde_mcm_settings settings_mod, string filename, string modInfoMsgPrefix)
+	Log("ImportPagesOptionsFromFile() -> " + modInfoMsgPrefix)
+	_settings_mod = settings_mod
+	_isBackupMode = true
+
+	if (filename == "")
+		filename = OPTIONS_DEFAULT_BACKUP_FILE
+	endif
+	
+	; Open config
+	_bak_optionFlagsBuf	= new int[128]
+	_bak_textBuf		= new string[128]
+	_bak_strValueBuf	= new string[128]
+	_bak_numValueBuf	= new float[128]
+	_bak_stateOptionMap	= new string[128]
+	_bak_values 		= new string[4]
+		
+	FakeSetPage("", -1) ; Default page
+	OnConfigOpen()		
+	
+	; YeOlde
+	; The default page is already opened. So we can backup it before looping in Pages.
+	Log("  ImportPagesOptionsFromFile() -> Page '(none)'")
+	_settings_mod.UpdateInfoMsg(modInfoMsgPrefix + ": mod '" + ModName + "', page '(none)'...")
+	ImportPageOptionsFromFile(filename)		
+	_settings_mod.UpdateInfoMsg(modInfoMsgPrefix + ": mod '" + ModName + "', page '(none)'... (DONE)")
+
+	int i = 0
+	while (i < Pages.Length)
+		string msg = modInfoMsgPrefix + ": mod '" + ModName + "', page '" + Pages[i] + "'..."
+		Log("  ImportPagesOptionsFromFile() -> " + msg)
+		_settings_mod.UpdateInfoMsg(msg)
+		FakeSetPage(Pages[i], i)
+		ImportPageOptionsFromFile(filename)	
+		_settings_mod.UpdateInfoMsg(msg + " (DONE)")
+		i += 1
+	endwhile
+
+	; Close config
+	OnConfigClose()
+	ClearOptionBuffers()
+	_bak_optionFlagsBuf	= new int[1]
+	_bak_textBuf		= new string[1]
+	_bak_strValueBuf	= new string[1]
+	_bak_numValueBuf	= new float[1]
+	_bak_stateOptionMap	= new string[1]
+	_isBackupMode = false
+endfunction
+
+; YeOlde
+function BackupAllPagesOptions(yeolde_mcm_settings settings_mod, string modInfoMsgPrefix)	
+	Log("BackupAllPagesOptions() -> " + ModName)
+	_settings_mod = settings_mod
+	_isBackupMode = true
+	bool configOpened = false
+	
+	; Open config
+	_bak_optionFlagsBuf	= new int[128]
+	_bak_textBuf		= new string[128]
+	_bak_strValueBuf	= new string[128]
+	_bak_numValueBuf	= new float[128]
+	_bak_stateOptionMap	= new string[128]
+	_bak_values 		= new string[4]
+			
+	; YeOlde
+	; The default page is already opened. So we can backup it before looping in Pages.
+	Log("  BackupAllPagesOptions() -> Page '(none)'")
+
+	if (!_configManager.IsPageBackupBlackListed(ModName, "(none)"))
+		
+		_settings_mod.UpdateInfoMsg(modInfoMsgPrefix + ": mod '" + ModName + "', page '(none)'...")
+		FakeSetPage("", -1) ; Default page
+		OnConfigOpen()	
+		BackupPageOptions()
+		_settings_mod.UpdateInfoMsg(modInfoMsgPrefix + ": mod '" + ModName + "', page '(none)'... (DONE)")
+		configOpened = true
+	endif
+	
+
+	int i = 0
+	while (i < Pages.Length)
+		string msg = modInfoMsgPrefix + ": mod '" + ModName + "', page '" + Pages[i] + "'"
+		Log("  BackupAllPagesOptions() -> " + msg)
+
+		if (!_configManager.IsPageBackupBlackListed(ModName, Pages[i]))		
+			_settings_mod.UpdateInfoMsg(msg + "...")
+			FakeSetPage(Pages[i], i)
+			if (!configOpened)				
+				OnConfigOpen()	
+				configOpened = true
+			endif
+			BackupPageOptions()		
+			_settings_mod.UpdateInfoMsg(msg + "... (DONE)")
+		else
+			_settings_mod.UpdateInfoMsg(msg + " is on the blacklist and won't be saved. (DONE)")
+			Utility.Wait(0.5)
+		endif
+		i += 1
+	endwhile
+
+	; Close config
+	OnConfigClose()
+	ClearOptionBuffers()
+	_bak_optionFlagsBuf	= new int[1]
+	_bak_textBuf		= new string[1]
+	_bak_strValueBuf	= new string[1]
+	_bak_numValueBuf	= new float[1]
+	_bak_stateOptionMap	= new string[1]
+	_isBackupMode = false
+endfunction
+
+
+; YeOlde
 function BackupPageOptions()
 	Log("BackupPageOptions()")
-	string pagename = _currentPage
+
+	string pagename = _bak_currentPage
 	if (pagename == "")
 		pagename = "(none)"
 	endif
 	string path = "." + self.ModName + "." + pagename + "."
 	
 	int index = 0
-	if (_configOpened)
-		while (index < 128)
-			if (_stateOptionMap[index] != "" || _textBuf[index] != "" || _strValueBuf[index] != "" || _numValueBuf[index] != 0)
-				int optionType = _optionFlagsBuf[index] % 0x100
-				if (optionType > 1) ; Skip EmptyOption (0) and HeaderOption (1)
-					if (optionType == OPTION_TYPE_MENU)
-						; Log("YeOlde::BackupPageOptions() -> RequestMenuDialogData")
-						RequestMenuDialogData(index)
-						int menuIndex = 0
-						while(menuIndex < _currentMenuOptions.Length)
-							; Log("YeOlde::BackupPageOptions() -> RequestMenuDialogData loop, item: " + _currentMenuOptions[menuIndex])
-							if (_currentMenuOptions[menuIndex] == _strValueBuf[index])
-								_numValueBuf[index] = menuIndex
+	while (index < 128)
+		if (_bak_stateOptionMap[index] != "" || _bak_textBuf[index] != "" || _bak_strValueBuf[index] != "" || _bak_numValueBuf[index] != 0)
+			_bak_optionType = _bak_optionFlagsBuf[index] % 0x100
+			if (_bak_optionType > 1) ; Skip EmptyOption (0) and HeaderOption (1)
+				if (_bak_optionType == 0x05) ; MenuOption
+					Log("YeOlde::BackupPageOptions() -> FakeRequestMenuDialogData: " + _bak_strValueBuf[index])
+					FakeRequestMenuDialogData(index)
+					
+					bool menuFound = false
+					int menuIndex = 0
+					while(menuIndex < _currentMenuOptions.Length && !menuFound)
+						Log("  YeOlde::BackupPageOptions() -> FakeRequestMenuDialogData loop, index/Length: " + menuIndex + "/" + _currentMenuOptions.Length)
+						Log("  YeOlde::BackupPageOptions() -> FakeRequestMenuDialogData loop, item: " + _currentMenuOptions[menuIndex])
+						if (_currentMenuOptions[menuIndex] == _bak_strValueBuf[index])
+							_bak_numValueBuf[index] = menuIndex
 
-								; Log("YeOlde::BackupPageOptions() -> Menu index found: index " + menuIndex + " for item '" + _textBuf[index] + "'")
-								menuIndex = _currentMenuOptions.Length
+							Log("    YeOlde::BackupPageOptions() -> Menu index found: index " + menuIndex + " for item '" + _bak_textBuf[index] + "'")
+							menuFound = true
+						endif
+						menuIndex += 1
+					endwhile
+					if (!menuFound)
+						; The "Sky UI" case: we fake a call for all indexes to know what are real values.
+						Log("YeOlde::BackupPageOptions() -> Menu index not found, going for some fake menu calls...")
+
+						string menuStrValue = _bak_strValueBuf[index]
+						menuIndex = 0
+						while(menuIndex < _currentMenuOptions.Length && !menuFound)
+							Log("  YeOlde::BackupPageOptions() -> ForceMenuIndex loop, item: " + _currentMenuOptions[menuIndex])
+							ForceMenuIndex(index, menuIndex, _bak_stateOptionMap[index])
+							; _bak_strValueBuf[index] value will have changed by now, so we validate if it's the one we
+							;     are looking for.
+							if (menuStrValue == _bak_strValueBuf[index])
+								_bak_numValueBuf[index] = menuIndex
+								Log("    YeOlde::BackupPageOptions() -> Menu index found: index " + menuIndex + " for item '" + _bak_textBuf[index] + "'")
+								menuFound = true
 							endif
+
 							menuIndex += 1
 						endwhile
 					endif
-					SetYeOldeBackupValues(path + index, index, optionType, _strValueBuf[index], _numValueBuf[index] as int, _numValueBuf[index])
 				endif
-			endIf
-			index += 1
-		endwhile
-	else
-		Log("BackupPageOptions() ERROR: Config is not opened for " + self.ModName)
+				; Backuping option
+				string jsonPath = path + index
+				_bak_values[0] = _bak_optionType
+				_bak_values[1] = _bak_strValueBuf[index]
+				_bak_values[2] = _bak_numValueBuf[index]
+				_bak_values[3] = _bak_stateOptionMap[index]
+				JsonUtil.SetPathStringArray(_fileName, jsonPath, _bak_values)
+			endif
+		endIf
+		index += 1
+	endwhile
+	
+	JsonUtil.Save(OPTIONS_DEFAULT_BACKUP_FILE)	
+endFunction
+
+
+; YeOlde
+function ImportPageOptionsFromFile(string filename = "")
+	Log("ImportPageOptionsFromFile() -> " + ModName)
+
+	string pagename = _bak_currentPage
+	if (pagename == "")
+		pagename = "(none)"
 	endif
-	JsonUtil.Save(OPTIONS_DEFAULT_BACKUP_FILE)
+	string path = "." + self.ModName + "." + pagename
+	string[] options = JsonUtil.PathMembers(filename, path)
+	
+	int i = 0
+	while (i < options.Length)
+		string[] values = JsonUtil.PathStringElements(filename, path + "." + options[i])					
+		int index = options[i] as int
+		int optType = values[0] as int
+		string strValue = values[1]
+		int intValue = values[2] as int
+		float floatValue = values[2] as float
+		string stateValue = values[3]
+					
+		if (optType == OPTION_TYPE_TEXT)
+			ForceTextOption(index, strValue, stateValue)
+
+		elseif (optType == OPTION_TYPE_TOGGLE)
+			ForceToggleOption(index, intValue, stateValue)
+
+		elseif (optType == OPTION_TYPE_SLIDER)
+			ForceSliderOptionValue(index, floatValue, stateValue)
+
+		elseif (optType == OPTION_TYPE_MENU)
+			ForceMenuIndex(index, intValue, stateValue)
+
+		elseif (optType == OPTION_TYPE_COLOR)
+			ForceColorValue(index, intValue, stateValue)
+
+		elseif (optType == OPTION_TYPE_KEYMAP)
+			ForceRemapKey(index, intValue, stateValue)
+
+		elseif (optType == OPTION_TYPE_INPUT)
+			ForceInputText(index, strValue, stateValue)
+
+		else
+			; Header or empty
+			Log("        optType value not valid -> " + optType)
+		endif
+
+		i += 1
+	endwhile
 endFunction
 
 function ResetOption(int a_index)
-	if (_configOpened)
-		string optionState = _stateOptionMap[a_index]
-		if (optionState != "")
-			string oldState = GetState()
-			gotoState(optionState)
-			OnDefaultST()
+	string optionState = _stateOptionMap[a_index]
+	if (optionState != "")
+		string oldState = GetState()
+		gotoState(optionState)
+		OnDefaultST()
 
-			gotoState(oldState)
-		else
-			int option = a_index + _currentPageNum * 0x100
-			OnOptionDefault(option)
-		endIf
+		gotoState(oldState)
 	else
-		Log("YeOlde::ResetOption(" + a_index + ") ERROR: Config is not opened for " + self.ModName)
-	endif
+		int option = a_index + _currentPageNum * 0x100
+		OnOptionDefault(option)
+	endIf
 endFunction
 
 function HighlightOption(int a_index)
@@ -1305,14 +1662,14 @@ endFunction
 ; YeOlde
 function ForceRemapKey(int a_index, int a_keyCode, string a_stateValue)
 	Log("ForceRemapKey(" + a_index + ", " + a_keyCode + ", " + a_stateValue + ")")
-	string optionState = _stateOptionMap[a_index]
+	string optionState = _bak_stateOptionMap[a_index]
 	if (a_stateValue != "")
 		string oldState = GetState()
 		gotoState(a_stateValue)
 		OnKeyMapChangeST(a_keyCode, "", "")
 		gotoState(oldState)
 	else
-		int option = a_index + _currentPageNum * 0x100
+		int option = a_index + _bak_currentPageNum * 0x100
 		OnOptionKeyMapChange(option, a_keyCode, "", "")
 	endIf
 endFunction
@@ -1407,8 +1764,8 @@ function SetInputDialogStartText(String a_text)
 endFunction
 
 ; YeOlde
-function ForceInputText(int a_index, int a_pageNum, String a_text, string a_stateValue)
-	Log("ForceInputText(" + a_index + ", " + a_pageNum + ", " + a_text + ", " + a_stateValue + ")")
+function ForceInputText(int a_index, String a_text, string a_stateValue)
+	Log("ForceInputText(" + a_index + ", " + a_text + ", " + a_stateValue + ")")
 	if a_stateValue != ""
 		String oldState = self.GetState()
 		self.GotoState(a_stateValue)
@@ -1416,13 +1773,19 @@ function ForceInputText(int a_index, int a_pageNum, String a_text, string a_stat
 
 		self.GotoState(oldState)
 	else
-		int activeOption = a_index + a_pageNum * 256
+		int activeOption = a_index + _bak_currentPageNum * 0x100
 		self.OnOptionInputAccept(activeOption, a_text)
 	endIf
 endFunction
 
 function SetInputText(String a_text)
-	String optionState = _stateOptionMap[_activeOption % 256]
+	String optionState
+	if(_isBackupMode) 
+		optionState = _bak_stateOptionMap[_activeOption % 0x100]
+	else
+		optionState = _stateOptionMap[_activeOption % 0x100]
+	endif
+
 	if optionState != ""
 		String oldState = self.GetState()
 		self.GotoState(optionState)

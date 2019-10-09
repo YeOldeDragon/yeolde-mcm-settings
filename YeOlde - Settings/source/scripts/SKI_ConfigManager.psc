@@ -58,6 +58,10 @@ string[]			_allNames
 bool[]				_isModEnabled
 bool 				_yeoldeModInitialized = false
 
+string[] 			_blackListModNames
+string[] 			_blackListModPageNames
+yeolde_mcm_settings _backup_mod
+
 ; YeOlde
 string[] function GetAllModNames()
 	return _allNames
@@ -68,10 +72,6 @@ bool[] function GetAllEnabledModFlags()
 	return _isModEnabled
 endFunction
 
-; ; YeOlde
-; SKI_ConfigBase[] function GetAllMods()
-; 	return _allMods
-; endFunction
 
 int function GetNbMods()
 	return _configCount
@@ -213,21 +213,18 @@ endEvent
 ; YeOlde
 function ForceModSelect(int modIndex)
 	if (modIndex > -1)
-
-		; YeOlde: Since we reallocate buffers, there's no need to clear them.
-		; We can clean the buffers of the previous menu now
 		if (_activeConfig != none)
 			_activeConfig.CloseConfig()
 		endIf
 
 		_activeConfig = _modConfigs[modIndex]
+
 		if (_activeConfig != none)
 			; _activeConfig.OpenConfig(false)
 			_activeConfig.OpenConfig()
 		else
 			Error("ForceModSelect -> no active config")
 		endif
-		UI.InvokeBool(JOURNAL_MENU, MENU_ROOT + ".unlock", true)
 	endIf
 endfunction
 
@@ -249,7 +246,7 @@ endEvent
 ; YeOlde
 function ForcePageSelect(int a_index, string a_pageName)
 	Log("ForcePageSelect -> str:" + a_pageName + ", index:" + a_index)
-	_activeConfig.ForceSetPage(a_pageName, a_index)
+	_activeConfig.SetPage(a_pageName, a_index)
 	; YeOlde: Leave here or remove???
 	UI.InvokeBool(JOURNAL_MENU, MENU_ROOT + ".unlock", true)
 endfunction
@@ -343,9 +340,55 @@ endEvent
 
 ; FUNCTIONS ---------------------------------------------------------------------------------------
 
+; YeOlde 
+function InitializeBackupBlackList()
+	_blackListModNames = new string[5]
+	_blackListModPageNames = new string[5]
+
+	_blackListModNames[0] = "YeOlde - Settings"
+	_blackListModPageNames[0] = "*"
+
+	_blackListModNames[1] = "Skyrim Wayshrines"
+	_blackListModPageNames[1] = "*"
+
+	_blackListModNames[2] = "AH Hotkeys"
+	_blackListModPageNames[2] = "*"
+	
+	_blackListModNames[3] = "Wearable Lanterns"
+	_blackListModPageNames[3] = "*"
+	
+	_blackListModNames[4] = "Complete Alchemy"
+	_blackListModPageNames[4] = "*"
+
+	
+endfunction
+
+
 ; YeOlde
-function BackupAllModValues()
+bool function IsPageBackupBlackListed(string mod, string page)
+	Log("IsPageBackupBlackListed(" + mod + ", " + page + ")")
+	int i = 0
+	while (i < _blackListModNames.Length)
+		if (_blackListModNames[i] == mod && (_blackListModPageNames[i] == page || _blackListModPageNames[i] == "*"))
+			string msg = "The mod '" + mod + "' won't be saved."
+			Log("IsPageBackupBlackListed() -> " + msg)
+			return true
+		endif
+		i += 1
+	endwhile
+
+	return false
+endfunction
+
+
+; YeOlde
+function BackupAllModValues(yeolde_mcm_settings settings_mod)
 	Log("BackupAllModValues -> START")
+	SKI_ConfigBase config
+
+	_backup_mod = settings_mod
+
+	InitializeBackupBlackList()
 
 	; We unhide all mods before starting
 	; int tmpIndex = 0
@@ -357,32 +400,38 @@ function BackupAllModValues()
 	; endwhile
 
 	int i = 0
+	int nbMods = 0
 	while (i<_modConfigs.Length)
-		if(_modConfigs[i] != none && _modConfigs[i].ModName != "YeOlde - Settings")
-			Log("YeOlde_JSON:ModName -> " + _modConfigs[i].ModName)
-			
-			ForceModSelect(i)
-
-			if (_modConfigs[i].Pages.Length == 0)
-				Log("  YeOlde_JSON:Page -> " + "(none)")
-				; only the default page.	
-				_modConfigs[i].BackupPageOptions()				
-			else				
-				int j = 0
-				while (j < _modConfigs[i].Pages.Length)
-					Log("  YeOlde_JSON:Page -> " + _modConfigs[i].Pages[j])
-
-					ForcePageSelect(j, _modConfigs[i].Pages[j])
-					_modConfigs[i].BackupPageOptions()
-
-					j += 1
-				endwhile
-			endif
+		if(_modConfigs[i] != none)
+			nbMods += 1
 		endif
 		i += 1
 	endwhile
 
-	Input.TapKey(15) ; press TAP to exit current menu
+	i = 0
+	int nbModsDone = 0
+	while (i<_modConfigs.Length && nbModsDone < nbMods)
+		string msgPrefix = "(" + (nbModsDone+1) + "/" + nbMods + ")"
+		settings_mod.UpdateBackupButtonText("Mod " + msgPrefix + " ...")	
+
+		if(_modConfigs[i] != none)
+			if(!IsPageBackupBlackListed(_modConfigs[i].ModName, "*"))
+				Log("YeOlde_JSON:ModName -> " + _modConfigs[i].ModName)					
+				config = _modConfigs[i]
+				config.BackupAllPagesOptions(settings_mod, msgPrefix)
+			else
+				settings_mod.UpdateInfoMsg(msgPrefix + "mod '" + _modConfigs[i].ModName + "' is on the blacklist and won't be saved.")
+			endif
+			nbModsDone += 1
+		
+		endif
+		i += 1
+	endwhile
+
+	string msg = "Done"
+	settings_mod.UpdateBackupButtonText(msg)	
+
+	; Input.TapKey(15) ; press TAB to exit current menu
 	
 	Log("BackupAllModValues -> BACKUP COMPLETED")
 endfunction
@@ -395,109 +444,32 @@ function ResetMCMBackupFile(string filename)
 endfunction
 
 ; YeOlde
-function ImportAllMcmMenuValues(string filename)	
+function ImportAllMcmMenuValues(yeolde_mcm_settings settings_mod, string filename = "")	
 	Log("ImportAllMcmMenuValues() -> " + filename)
+	SKI_ConfigBase config
+	
+	_backup_mod = settings_mod
+
 	string[] mods = JsonUtil.PathMembers(filename, ".")
 
 	int i = 0
 	while (i< mods.length)
-		ImportMCMMenuValues(filename, mods[i])
+		string msgPrefix = "(" + (i+1) + "/" + mods.length + ")"
+		settings_mod.UpdateImportButtonText("Mod " + msgPrefix + "... ")	
+
+		int modIndex = FindModIndexByName(mods[i])
+		config = _modConfigs[modIndex]
+		config.ImportPagesOptionsFromFile(settings_mod, filename, msgPrefix)
 		i += 1
 	endWhile
 
-	Input.TapKey(15) ; press TAP to exit current menu
+	string msg = "Done"
+	settings_mod.UpdateImportButtonText(msg)	
+
+	; Input.TapKey(15) ; press TAB to exit current menu
 	
 	Log("ImportAllMcmMenuValues -> IMPORT COMPLETED")
 
-endfunction
-
-
-; YeOlde
-function ImportMCMMenuValues(string filename, string modname)
-	Log("  ImportMCMMenuValues() -> " + modname)
-	int modIndex = FindModIndexByName(modname)
-	
-	if (modIndex > -1)
-		SKI_ConfigBase currentMod = _allMods[modIndex]
-
-		; Open mod page
-		ForceModSelect(modIndex)
-		string[] pages = JsonUtil.PathMembers(filename, "." + modname)
-		
-		int i = 0
-		while (i< pages.length)
-			Log("    PageNames -> " + pages[i])
-			string pageName = pages[i]
-			int pageIndex = -2
-
-			if (pageName == "(none)")
-				pageName = ""
-				pageIndex = -1
-			else
-				int j = 0
-				while (j < currentMod.Pages.Length)
-					if (currentMod.Pages[j] == pageName)
-						pageIndex = j
-
-						; leave while loop
-						j = currentMod.Pages.Length
-					endif
-					j += 1
-				endwhile
-			endif
-			if (pageIndex > -2)
-				; The page exist
-				ForcePageSelect(pageIndex, pageName)
-
-				string[] options = JsonUtil.PathMembers(filename, "." + modname + "." + pages[i])
-
-				int k = 0
-				while (k < options.Length)
-					string jsonPath = "." + modname + "." + pages[i] + "." + options[k]
-					Log("        json path -> " + jsonPath)
-					string[] values = JsonUtil.PathStringElements(filename, jsonPath)					
-					int index = options[k] as int
-					int optType = values[0] as int
-					string strValue = values[1]
-					int intValue = values[2] as int
-					float floatValue = values[3] as float
-					string stateValue = values[4]
-					
-					if (optType == currentMod.OPTION_TYPE_TEXT)
-						currentMod.ForceTextOption(index, strValue, stateValue)
-
-					elseif (optType == currentMod.OPTION_TYPE_TOGGLE)
-						currentMod.ForceToggleOption(index, intValue, stateValue)
-
-					elseif (optType == currentMod.OPTION_TYPE_SLIDER)
-						currentMod.ForceSliderOptionValue(index, pageIndex, floatValue, stateValue)
-
-					elseif (optType == currentMod.OPTION_TYPE_MENU)
-						currentMod.ForceMenuIndex(index, intValue, stateValue)
-
-					elseif (optType == currentMod.OPTION_TYPE_COLOR)
-						currentMod.ForceColorValue(index, intValue, stateValue)
-
-					elseif (optType == currentMod.OPTION_TYPE_KEYMAP)
-						currentMod.ForceRemapKey(index, intValue, stateValue)
-
-						; OnKeymapChange("", "", intValue, none)
-					elseif (optType == currentMod.OPTION_TYPE_INPUT)
-						currentMod.ForceInputText(index, pageIndex, strValue, stateValue)
-
-					else
-						; Header or empty
-						Log("        optType value not valid -> " + optType)
-					endif
-					k += 1
-				endwhile
-			else				
-				Log("      Page not found -> " + pages[i])
-			endif
-
-			i += 1
-		endWhile
-	endif
 endfunction
 
 
