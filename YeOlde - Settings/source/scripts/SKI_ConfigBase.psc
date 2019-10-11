@@ -1,11 +1,11 @@
 scriptname SKI_ConfigBase extends SKI_QuestBase
 
 import JsonUtil
-import PapyrusUtil
+import JContainers
 
 ; YEOLDE CONSNTANTS & VARIABLES
 
-string property 	OPTIONS_DEFAULT_BACKUP_FILE = "../YeOlde-Settings/mcm_backup.json" autoReadonly
+string property 	OPTIONS_DEFAULT_BACKUP_FILE = "yeOlde-settings/mcm_backup.json" autoReadonly
 string				_fileName				= ""
 yeolde_mcm_settings _settings_mod
 bool 				_configOpened = false
@@ -393,6 +393,7 @@ endfunction
 
 ; @interface
 int function AddSliderOption(string a_text, float a_value, string a_formatString = "{0}", int a_flags = 0)
+	Log("AddSliderOption()")
 	return AddOption(OPTION_TYPE_SLIDER, a_text, a_formatString, a_value, a_flags)
 endFunction
 
@@ -489,6 +490,38 @@ function SetOptionFlags(int a_option, int a_flags, bool a_noUpdate = false)
 
 	if (!a_noUpdate)
 		UI.Invoke(JOURNAL_MENU, MENU_ROOT + ".invalidateOptionData")
+	endIf
+endFunction
+
+; YeOlde
+function ResetTextOptionValues(int a_option, string a_text, string a_value, bool a_noUpdate = false)
+	Log("ResetTextOptionValue(" + a_option + ", " + a_text + ", " + a_value + ") -> BackupMode: " + _isBackupMode)
+
+
+	int index = a_option % 0x100
+	int type = _optionFlagsBuf[index] % 0x100
+
+	if (type != OPTION_TYPE_TEXT)
+		int pageIdx = ((a_option / 0x100) as int) - 1
+		if (pageIdx != -1)
+			Error("Option type mismatch. Expected text option, page \"" + Pages[pageIdx] + "\", index " + index)
+		else
+			Error("Option type mismatch. Expected text option, page \"\", index " + index)
+		endIf
+		return
+	endIf
+	
+	string menu = JOURNAL_MENU
+	string root = MENU_ROOT
+	
+	_textBuf[index] = a_text
+	_strValueBuf[index] = a_value
+
+	UI.SetInt(menu, root + ".optionCursorIndex", index)
+	UI.SetString(menu, root + ".optionCursor.text", a_text)
+	UI.SetString(menu, root + ".optionCursor.strValue", a_value)
+	if (!a_noUpdate)
+		UI.Invoke(menu, root + ".invalidateOptionData")
 	endIf
 endFunction
 
@@ -904,6 +937,7 @@ function OpenConfig()
 endFunction
 
 function CloseConfig()
+	Log("CloseConfig() -> _isBackupMode:" + _isBackupMode)
 	OnConfigClose()
 	ClearOptionBuffers()
 	_waitForMessage = false
@@ -918,14 +952,16 @@ endFunction
 
 ; YeOlde
 function FakeSetPage(string a_page, int a_index)
-	Log("ForceSetPage(" + a_page + ", " + a_index + ")")
+	Log("FakeSetPage(" + a_page + ", " + a_index + ")")
 	_bak_currentPage = a_page
 	_bak_currentPageNum = 1+a_index
 
 	ClearOptionBuffers()
 	
 	; _state = STATE_RESET
+	Log("OnPageReset() -> START")
 	OnPageReset(a_page)
+	Log("OnPageReset() -> END")
 	; _state = STATE_DEFAULT
 endFunction
 
@@ -948,12 +984,14 @@ function SetPage(string a_page, int a_index)
 endFunction
 
 int function AddOption(int a_optionType, string a_text, string a_strValue, float a_numValue, int a_flags)
+	Log("AddOption(" + a_optionType + ", " + a_text + ", " + a_strValue + ", " + a_numValue + ")")
 	if (_isBackupMode)
 		int pos = _bak_cursorPosition
+		Log("AddOption() -> _bak_cursorPosition: " + _bak_cursorPosition)
 		if (pos == -1)
 			return -1 ; invalid
 		endIf
-	
+		Log("AddOption() -> Storing variables")
 		_bak_optionFlagsBuf[pos] = a_optionType + a_flags * 0x100
 		_bak_textBuf[pos] = a_text
 		_bak_strValueBuf[pos] = a_strValue
@@ -1063,6 +1101,7 @@ function WriteOptionBuffers()
 endFunction
 
 function ClearOptionBuffers()
+	Log("ClearOptionBuffers() -> _isBackupMode:" + _isBackupMode)
 	if (_isBackupMode)
 		int t = OPTION_TYPE_EMPTY
 		int i = 0
@@ -1394,41 +1433,45 @@ function SelectOption(int a_index)
 endFunction
 
 ; YeOlde
-function ImportPagesOptionsFromFile(yeolde_mcm_settings settings_mod, string filename, string modInfoMsgPrefix)
-	Log("ImportPagesOptionsFromFile() -> " + modInfoMsgPrefix)
+function ImportPages(yeolde_mcm_settings settings_mod, int jMod, string modInfoMsgPrefix)
+	Log("ImportPages() -> " + modInfoMsgPrefix)
 	_settings_mod = settings_mod
 	_isBackupMode = true
-
-	if (filename == "")
-		filename = OPTIONS_DEFAULT_BACKUP_FILE
-	endif
 	
 	; Open config
-	_bak_optionFlagsBuf	= new int[128]
-	_bak_textBuf		= new string[128]
-	_bak_strValueBuf	= new string[128]
-	_bak_numValueBuf	= new float[128]
-	_bak_stateOptionMap	= new string[128]
-	_bak_values 		= new string[4]
+	_bak_optionFlagsBuf	= Utility.CreateIntArray(128, 0)
+	_bak_textBuf		= Utility.CreateStringArray(128, "")
+	_bak_strValueBuf	= Utility.CreateStringArray(128, "")
+	_bak_numValueBuf	= Utility.CreateFloatArray(128, 0.0)
+	_bak_stateOptionMap	= Utility.CreateStringArray(128, "")
+	_bak_values 		= Utility.CreateStringArray(4, "")
 		
 	FakeSetPage("", -1) ; Default page
 	OnConfigOpen()		
 	
 	; YeOlde
 	; The default page is already opened. So we can backup it before looping in Pages.
-	Log("  ImportPagesOptionsFromFile() -> Page '(none)'")
-	_settings_mod.UpdateInfoMsg(modInfoMsgPrefix + ": mod '" + ModName + "', page '(none)'...")
-	ImportPageOptionsFromFile(filename)		
-	_settings_mod.UpdateInfoMsg(modInfoMsgPrefix + ": mod '" + ModName + "', page '(none)'... (DONE)")
+	int jPage = JMap.getObj(jMod, "(none)")
+	if (jPage > 0)
+		Log("  ImportPages() -> Page '(none)'")
+		_settings_mod.UpdateInfoMsg(modInfoMsgPrefix + ": mod '" + ModName + "', page '(none)'...")		
+		ImportPageOptions(jPage)		
+		_settings_mod.UpdateInfoMsg(modInfoMsgPrefix + ": mod '" + ModName + "', page '(none)'... (DONE)")
+	endif
 
 	int i = 0
 	while (i < Pages.Length)
-		string msg = modInfoMsgPrefix + ": mod '" + ModName + "', page '" + Pages[i] + "'..."
-		Log("  ImportPagesOptionsFromFile() -> " + msg)
-		_settings_mod.UpdateInfoMsg(msg)
-		FakeSetPage(Pages[i], i)
-		ImportPageOptionsFromFile(filename)	
-		_settings_mod.UpdateInfoMsg(msg + " (DONE)")
+		jPage = JMap.getObj(jMod, Pages[i])
+		if (jPage > 0)
+			string msg = modInfoMsgPrefix + ": mod '" + ModName + "', page '" + Pages[i] + "'..."
+			Log("  ImportPages() -> " + msg)
+			_settings_mod.UpdateInfoMsg(msg)
+			FakeSetPage(Pages[i], i)
+			ImportPageOptions(jPage)	
+			_settings_mod.UpdateInfoMsg(msg + " (DONE)")
+		else
+			Log("  ImportPages() -> No backup for page '" + Pages[i] + "'")
+		endif
 		i += 1
 	endwhile
 
@@ -1444,19 +1487,22 @@ function ImportPagesOptionsFromFile(yeolde_mcm_settings settings_mod, string fil
 endfunction
 
 ; YeOlde
-function BackupAllPagesOptions(yeolde_mcm_settings settings_mod, string modInfoMsgPrefix)	
+function BackupAllPagesOptions(yeolde_mcm_settings settings_mod, int jBackup, string modInfoMsgPrefix)	
 	Log("BackupAllPagesOptions() -> " + ModName)
 	_settings_mod = settings_mod
 	_isBackupMode = true
 	bool configOpened = false
 	
 	; Open config
-	_bak_optionFlagsBuf	= new int[128]
-	_bak_textBuf		= new string[128]
-	_bak_strValueBuf	= new string[128]
-	_bak_numValueBuf	= new float[128]
-	_bak_stateOptionMap	= new string[128]
-	_bak_values 		= new string[4]
+	_bak_optionFlagsBuf	= Utility.CreateIntArray(128, 0)
+	_bak_textBuf		= Utility.CreateStringArray(128, "")
+	_bak_strValueBuf	= Utility.CreateStringArray(128, "")
+	_bak_numValueBuf	= Utility.CreateFloatArray(128, 0.0)
+	_bak_stateOptionMap	= Utility.CreateStringArray(128, "")
+	_bak_values 		= Utility.CreateStringArray(4, "")
+
+	; Create/Get the mod config handler
+	int modHandler = BackupConfig.AddMod(jBackup, ModName)
 			
 	; YeOlde
 	; The default page is already opened. So we can backup it before looping in Pages.
@@ -1467,7 +1513,7 @@ function BackupAllPagesOptions(yeolde_mcm_settings settings_mod, string modInfoM
 		_settings_mod.UpdateInfoMsg(modInfoMsgPrefix + ": mod '" + ModName + "', page '(none)'...")
 		FakeSetPage("", -1) ; Default page
 		OnConfigOpen()	
-		BackupPageOptions()
+		BackupPageOptions(modHandler)
 		_settings_mod.UpdateInfoMsg(modInfoMsgPrefix + ": mod '" + ModName + "', page '(none)'... (DONE)")
 		configOpened = true
 	endif
@@ -1485,7 +1531,7 @@ function BackupAllPagesOptions(yeolde_mcm_settings settings_mod, string modInfoM
 				OnConfigOpen()	
 				configOpened = true
 			endif
-			BackupPageOptions()		
+			BackupPageOptions(modHandler)		
 			_settings_mod.UpdateInfoMsg(msg + "... (DONE)")
 		else
 			_settings_mod.UpdateInfoMsg(msg + " is on the blacklist and won't be saved. (DONE)")
@@ -1494,8 +1540,8 @@ function BackupAllPagesOptions(yeolde_mcm_settings settings_mod, string modInfoM
 		i += 1
 	endwhile
 
-	; Close config
-	OnConfigClose()
+	JValue.writeToFile(modHandler, JContainers.userDirectory() + "yeolde-settings/mods/" + ModName + ".json")
+
 	ClearOptionBuffers()
 	_bak_optionFlagsBuf	= new int[1]
 	_bak_textBuf		= new string[1]
@@ -1507,19 +1553,24 @@ endfunction
 
 
 ; YeOlde
-function BackupPageOptions()
-	Log("BackupPageOptions()")
+function BackupPageOptions(int jMod)
+	Log("BackupPageOptions() -> " + _bak_currentPage)
 
 	string pagename = _bak_currentPage
 	if (pagename == "")
 		pagename = "(none)"
 	endif
 	string path = "." + self.ModName + "." + pagename + "."
-	
+
+	int jPage = ModConfig.addPage(jMod, pagename)
+	Log("BackupPageOptions() -> jPage:" + jPage)
+
 	int index = 0
 	while (index < 128)
 		if (_bak_stateOptionMap[index] != "" || _bak_textBuf[index] != "" || _bak_strValueBuf[index] != "" || _bak_numValueBuf[index] != 0)
+			Log("BackupPageOptions() -> Loop index: " + index)
 			_bak_optionType = _bak_optionFlagsBuf[index] % 0x100
+			Log("BackupPageOptions() -> Option type: " + _bak_optionType)
 			if (_bak_optionType > 1) ; Skip EmptyOption (0) and HeaderOption (1)
 				if (_bak_optionType == 0x05) ; MenuOption
 					Log("YeOlde::BackupPageOptions() -> FakeRequestMenuDialogData: " + _bak_strValueBuf[index])
@@ -1560,66 +1611,70 @@ function BackupPageOptions()
 					endif
 				endif
 				; Backuping option
-				string jsonPath = path + index
-				_bak_values[0] = _bak_optionType
-				_bak_values[1] = _bak_strValueBuf[index]
-				_bak_values[2] = _bak_numValueBuf[index]
-				_bak_values[3] = _bak_stateOptionMap[index]
-				JsonUtil.SetPathStringArray(_fileName, jsonPath, _bak_values)
+				Log("PageConfig.addOption(" + jPage + ", " + index + ", " + _bak_optionType + ", " + _bak_strValueBuf[index] + ", " + _bak_numValueBuf[index] + ", " + _bak_stateOptionMap[index] + ")")
+				PageConfig.addOption(jPage, index, _bak_optionType, _bak_strValueBuf[index], _bak_numValueBuf[index], _bak_stateOptionMap[index])
+				; string jsonPath = path + index
+				; _bak_values[0] = _bak_optionType
+				; _bak_values[1] = _bak_strValueBuf[index]
+				; _bak_values[2] = _bak_numValueBuf[index]
+				; _bak_values[3] = _bak_stateOptionMap[index]
+				; JsonUtil.SetPathStringArray(_fileName, jsonPath, _bak_values)
 			endif
 		endIf
 		index += 1
 	endwhile
 	
-	JsonUtil.Save(OPTIONS_DEFAULT_BACKUP_FILE)	
+	; JsonUtil.Save(OPTIONS_DEFAULT_BACKUP_FILE)	
 endFunction
 
 
 ; YeOlde
-function ImportPageOptionsFromFile(string filename = "")
-	Log("ImportPageOptionsFromFile() -> " + ModName)
+function ImportPageOptions(int jPage)
+	Log("ImportPageOptions() -> page '" + _bak_currentPage + "'")
 
 	string pagename = _bak_currentPage
 	if (pagename == "")
 		pagename = "(none)"
 	endif
-	string path = "." + self.ModName + "." + pagename
-	string[] options = JsonUtil.PathMembers(filename, path)
+
+	string[] options = JMap.allKeysPArray(jPage)
 	
 	int i = 0
 	while (i < options.Length)
-		string[] values = JsonUtil.PathStringElements(filename, path + "." + options[i])					
-		int index = options[i] as int
-		int optType = values[0] as int
-		string strValue = values[1]
-		int intValue = values[2] as int
-		float floatValue = values[2] as float
-		string stateValue = values[3]
-					
-		if (optType == OPTION_TYPE_TEXT)
-			ForceTextOption(index, strValue, stateValue)
+		int jOption = JMap.getObj(jPage, options[i])
+		if (jOption > 0)
+			int index = JMap.getInt(jOption, "id")
+			int optType = JMap.getInt(jOption, "optionType")
+			string strValue = JMap.getStr(jOption, "strValue")
+			int intValue = JMap.getFlt(jOption, "fltValue") as int
+			float floatValue = JMap.getFlt(jOption, "fltValue")
+			string stateValue = JMap.getStr(jOption, "stateOption")
+						
+			if (optType == OPTION_TYPE_TEXT)
+				ForceTextOption(index, strValue, stateValue)
 
-		elseif (optType == OPTION_TYPE_TOGGLE)
-			ForceToggleOption(index, intValue, stateValue)
+			elseif (optType == OPTION_TYPE_TOGGLE)
+				ForceToggleOption(index, intValue, stateValue)
 
-		elseif (optType == OPTION_TYPE_SLIDER)
-			ForceSliderOptionValue(index, floatValue, stateValue)
+			elseif (optType == OPTION_TYPE_SLIDER)
+				ForceSliderOptionValue(index, floatValue, stateValue)
 
-		elseif (optType == OPTION_TYPE_MENU)
-			ForceMenuIndex(index, intValue, stateValue)
+			elseif (optType == OPTION_TYPE_MENU)
+				ForceMenuIndex(index, intValue, stateValue)
 
-		elseif (optType == OPTION_TYPE_COLOR)
-			ForceColorValue(index, intValue, stateValue)
+			elseif (optType == OPTION_TYPE_COLOR)
+				ForceColorValue(index, intValue, stateValue)
 
-		elseif (optType == OPTION_TYPE_KEYMAP)
-			ForceRemapKey(index, intValue, stateValue)
+			elseif (optType == OPTION_TYPE_KEYMAP)
+				ForceRemapKey(index, intValue, stateValue)
 
-		elseif (optType == OPTION_TYPE_INPUT)
-			ForceInputText(index, strValue, stateValue)
+			elseif (optType == OPTION_TYPE_INPUT)
+				ForceInputText(index, strValue, stateValue)
 
-		else
-			; Header or empty
-			Log("        optType value not valid -> " + optType)
+			else
+				; Header or empty
+				Log("        optType value not valid -> " + optType)
+			endif
 		endif
 
 		i += 1

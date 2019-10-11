@@ -1,7 +1,6 @@
 scriptname SKI_ConfigManager extends SKI_QuestBase hidden 
 
 import JsonUtil
-import PapyrusUtil
 import MiscUtil
 
 ; SCRIPT VERSION ----------------------------------------------------------------------------------
@@ -58,9 +57,11 @@ string[]			_allNames
 bool[]				_isModEnabled
 bool 				_yeoldeModInitialized = false
 
-string[] 			_blackListModNames
-string[] 			_blackListModPageNames
 yeolde_mcm_settings _backup_mod
+int 				_blackListSize 			= 0
+
+int					_jBlackList		= 0  ; Mods/pages to skip when importing.
+int					_jBackupInfo	= 0
 
 ; YeOlde
 string[] function GetAllModNames()
@@ -229,6 +230,7 @@ function ForceModSelect(int modIndex)
 endfunction
 
 event OnModSelect(string a_eventName, string a_strArg, float a_numArg, Form a_sender)
+	Log("OnModSelect() -> configIndex:" + a_numArg)
 	int configIndex = a_numArg as int
 	if (configIndex > -1)
 
@@ -341,41 +343,66 @@ endEvent
 ; FUNCTIONS ---------------------------------------------------------------------------------------
 
 ; YeOlde 
-function InitializeBackupBlackList()
-	_blackListModNames = new string[5]
-	_blackListModPageNames = new string[5]
+function InitializeImportBlackList()
+	string path = JContainers.userDirectory() + "yeolde-settings/backup_blacklist.json"
 
-	_blackListModNames[0] = "YeOlde - Settings"
-	_blackListModPageNames[0] = "*"
+	if (_jBlackList > 0)
+		JValue.release(_jBlackList)
+		_jBlackList = 0
+	endif
 
-	_blackListModNames[1] = "Skyrim Wayshrines"
-	_blackListModPageNames[1] = "*"
 
-	_blackListModNames[2] = "AH Hotkeys"
-	_blackListModPageNames[2] = "*"
+	if (!_backup_mod.UseDefaultBlacklistFile)
+		Log("InitializeImportBlackList() -> Using custom blacklist")
+		_jBlackList = JValue.readFromFile(path)
+	endif
 	
-	_blackListModNames[3] = "Wearable Lanterns"
-	_blackListModPageNames[3] = "*"
-	
-	_blackListModNames[4] = "Complete Alchemy"
-	_blackListModPageNames[4] = "*"
+	if (_jBlackList == 0)
+		Log("InitializeImportBlackList() -> Using default blacklist")
+		_jBlackList = JMap.object()
 
-	
+		JValue.retain(_jBlackList)		
+		AddModToBlackList("A Matter of Time")
+		AddModToBlackList("AH Hotkeys")	
+		AddModToBlackList("Complete Alchemy")	
+		AddModToBlackList("Hunterborn")	
+		AddModToBlackList("iEquip")	
+		AddModToBlackList("iNeed")	
+		AddModToBlackList("Skyrim Unbound")	
+		AddModToBlackList("Skyrim Wayshrines")	
+		AddModToBlackList("Wearable Lanterns")	
+		AddModToBlackList("YeOlde - Settings")	
+		JValue.writeToFile(_jBlackList, path)
+	endif
+
+	_blackListSize = JMap.count(_jBlackList)
+
+endfunction
+
+
+; YeOlde
+function AddModToBlackList(string modName)	
+	int jPages = JArray.object()
+	JMap.setObj(_jBlackList, modName, jPages)
+	JArray.addStr(jPages, "*")
 endfunction
 
 
 ; YeOlde
 bool function IsPageBackupBlackListed(string mod, string page)
-	Log("IsPageBackupBlackListed(" + mod + ", " + page + ")")
-	int i = 0
-	while (i < _blackListModNames.Length)
-		if (_blackListModNames[i] == mod && (_blackListModPageNames[i] == page || _blackListModPageNames[i] == "*"))
-			string msg = "The mod '" + mod + "' won't be saved."
+	Log("IsPageBackupBlackListed(" + mod + ", " + page + ") -> BlackList size:" + _blackListSize)
+	int jPages = JMap.getObj(_jBlackList, mod)
+	Log("IsPageBackupBlackListed() -> PagesId:" + jPages)
+	if (jPages > 0)
+		string value = JArray.getStr(jPages, 0)
+		Log("IsPageBackupBlackListed() -> value:" + value)
+
+		if (value == "*")
+			string msg = "The mod '" + mod + "' (page '" + page + "') won't be saved."
 			Log("IsPageBackupBlackListed() -> " + msg)
 			return true
 		endif
-		i += 1
-	endwhile
+	endif
 
 	return false
 endfunction
@@ -388,16 +415,7 @@ function BackupAllModValues(yeolde_mcm_settings settings_mod)
 
 	_backup_mod = settings_mod
 
-	InitializeBackupBlackList()
-
-	; We unhide all mods before starting
-	; int tmpIndex = 0
-	; while (tmpIndex < 128)
-	; 	_modConfigs[tmpIndex] = _allMods[tmpIndex]
-	; 	_modNames[tmpIndex] = _allNames[tmpIndex]
-	; 	_isModEnabled[tmpIndex] = true
-	; 	tmpIndex += 1
-	; endwhile
+	InitializeImportBlackList()
 
 	int i = 0
 	int nbMods = 0
@@ -408,6 +426,20 @@ function BackupAllModValues(yeolde_mcm_settings settings_mod)
 		i += 1
 	endwhile
 
+	; Backup files cleanup
+	BackupConfig.RemoveFromDisk("backup_file")
+	BackupConfig.RemoveModFilesFromDisk()
+	YeOldeBackupInfo.RemoveFromDisk()
+	
+
+	_jBackupInfo = YeOldeBackupInfo.getFileHandler()
+	YeOldeBackupInfo.addTimeStamp(_jBackupInfo, "1-START timestamp")
+	YeOldeBackupInfo.addStrIndexedArray(_jBackupInfo, "3-backup starting mod list", _modNames)
+	YeOldeBackupInfo.addStrArray(_jBackupInfo, "6-installed mod list", _allNames, true)
+	
+	int jBackup = BackupConfig.createInstance()
+	JValue.retain(jBackup)
+
 	i = 0
 	int nbModsDone = 0
 	while (i<_modConfigs.Length && nbModsDone < nbMods)
@@ -415,51 +447,75 @@ function BackupAllModValues(yeolde_mcm_settings settings_mod)
 		settings_mod.UpdateBackupButtonText("Mod " + msgPrefix + " ...")	
 
 		if(_modConfigs[i] != none)
-			if(!IsPageBackupBlackListed(_modConfigs[i].ModName, "*"))
-				Log("YeOlde_JSON:ModName -> " + _modConfigs[i].ModName)					
-				config = _modConfigs[i]
-				config.BackupAllPagesOptions(settings_mod, msgPrefix)
+			string modName = _modConfigs[i].ModName
+			if(IsPageBackupBlackListed(modName, "*"))
+				Log("YeOlde_JSON:ModName -> " + modName)	
+				YeOldeBackupInfo.addSkippedMod(_jBackupInfo, modName)
+				settings_mod.AddSkippedMod(msgPrefix + " " + modName)
+				settings_mod.UpdateInfoMsg(msgPrefix + "Backup for mod '" + modName + "' is not currently possible. Mod skipped.")
 			else
-				settings_mod.UpdateInfoMsg(msgPrefix + "mod '" + _modConfigs[i].ModName + "' is on the blacklist and won't be saved.")
+				Log("YeOlde_JSON:ModName -> " + modName)					
+				config = _modConfigs[i]
+				config.BackupAllPagesOptions(settings_mod, jBackup, msgPrefix)
+				YeOldeBackupInfo.addBackedUpMod(_jBackupInfo, modName)
 			endif
-			nbModsDone += 1
-		
+			nbModsDone += 1		
 		endif
 		i += 1
 	endwhile
+
+	; BackupConfig.SaveAndClose(jBackup, "backup_file")
+	JValue.release(jBackup)
+	JValue.zeroLifetime(jBackup)
 
 	string msg = "Done"
 	settings_mod.UpdateBackupButtonText(msg)	
 
 	; Input.TapKey(15) ; press TAB to exit current menu
 	
+	YeOldeBackupInfo.addTimeStamp(_jBackupInfo, "2-END timestamp")
+	YeOldeBackupInfo.SaveAndClose(_jBackupInfo)
 	Log("BackupAllModValues -> BACKUP COMPLETED")
 endfunction
 
 ; YeOlde
-function ResetMCMBackupFile(string filename)
+function ResetMCMBackupFile(string filename = "backup_file")
 	Log("ResetMCMBackupFile() -> " + filename)
 	JsonUtil.ClearAll(filename)
 	JsonUtil.Save(filename)
 endfunction
 
 ; YeOlde
-function ImportAllMcmMenuValues(yeolde_mcm_settings settings_mod, string filename = "")	
-	Log("ImportAllMcmMenuValues() -> " + filename)
+function ImportAllMcmMenuValues(yeolde_mcm_settings settings_mod)	
+	Log("ImportAllMcmMenuValues()")
 	SKI_ConfigBase config
 	
 	_backup_mod = settings_mod
 
-	string[] mods = JsonUtil.PathMembers(filename, ".")
+	int jBackup = BackupConfig.CreateImportInstance()
+	if(jBackup == 0)
+		settings_mod.UpdateImportButtonText("ERROR: Backup file not found")
+		Log("ImportAllMcmMenuValues() -> ERROR: Backup file not found")
+		return
+	endif
+
+	Log("ImportAllMcmMenuValues() -> allKeysPArray()")
+	string[] mods = JMap.allKeysPArray(jBackup)
+	Log("ImportAllMcmMenuValues() -> nbMods: " + mods.length)
 
 	int i = 0
 	while (i< mods.length)
 		string msgPrefix = "(" + (i+1) + "/" + mods.length + ")"
 		settings_mod.UpdateImportButtonText("Mod " + msgPrefix + "... ")	
 
-		int modIndex = FindModIndexByName(mods[i])
-		config = _modConfigs[modIndex]
-		config.ImportPagesOptionsFromFile(settings_mod, filename, msgPrefix)
+		int modIndex = FindModIndexByFileName(mods[i])
+		if (modIndex > -1)
+			int jMod = JMap.getObj(jBackup, mods[i])
+			config = _modConfigs[modIndex]
+			config.ImportPages(settings_mod, jMod, msgPrefix)
+		endif
+		
+		settings_mod.UpdateImportButtonText("Mod " + msgPrefix + "... DONE")	
 		i += 1
 	endWhile
 
@@ -474,10 +530,11 @@ endfunction
 
 
 ; YeOlde
-int function FindModIndexByName(string a_modName)
+int function FindModIndexByFileName(string a_modName)
+	Log("FindModIndexByFileName() -> " + a_modName)
 	int i = 0
 	while (i < _modNames.length)
-		if (_modNames[i] == a_modName)
+		if ((_modNames[i] + ".json") == a_modName)
 			return i
 		endIf			
 		i += 1
@@ -579,7 +636,7 @@ endFunction
 
 ; YeOlde
 int function DisableMod(SKI_ConfigBase a_menu, string a_modName)
-	Debug.Trace("DisableMod() -> " + a_modName)
+	Log("DisableMod() -> " + a_modName)
 
 	int index = FindModIndex(a_menu)
 	_isModEnabled[index] = false

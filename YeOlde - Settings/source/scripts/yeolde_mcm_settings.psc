@@ -8,6 +8,16 @@ SKI_ConfigManager property manager auto
 string[] property _modNames auto
 bool[] property _modEnableFlags auto
 int[] property _modMenuToggle auto
+int[] property _modMenuBackupInfos auto
+int property _modMenuBackupInfosIndex auto
+
+bool _useDefaultBlacklistFile = true
+
+bool property UseDefaultBlacklistFile hidden
+    bool function get()
+        return _useDefaultBlacklistFile
+    endFunction
+endProperty
 
 ; ;  YeOlde - Respawn 
 ; int property YEOLDE_VAR_RESPAWN_NONE_ACTIVATED_ID = 0x08005902 autoreadonly
@@ -28,6 +38,7 @@ Actor _playerRef
 ; @overrides SKI_ConfigBase
 event OnConfigInit()  
     _modMenuToggle = new int[128]
+    _modMenuBackupInfosIndex = 0
 
     ; string pagesArrayStr = "MCM Menu Settings"
     
@@ -72,10 +83,9 @@ event OnPageReset(string a_page)
     if a_page == ""
 		self.LoadCustomContent("yeolde/settings_splash.dds", 0.000000, 0.000000)
 		return 
-	else
-		self.UnloadCustomContent()
     endIf
 
+    self.UnloadCustomContent()
     _modNames = manager.GetAllModNames()
     _modEnableFlags = manager.GetAllEnabledModFlags()
     
@@ -100,16 +110,28 @@ event OnPageReset(string a_page)
         AddHeaderOption("Debug / Panic button")
         AddTextOptionST("ForceMCMReset", "Press to reset MCM menus", "Press to reset")    
     
-    elseif a_page == "Import/export settings"
+    elseif a_page == "Import/export settings"        
+        ClearSkippedModList()
+
         SetCursorFillMode(TOP_TO_BOTTOM)
         AddHeaderOption("Import / Export MCM configurations")
         AddTextOptionST("MCMValuesBackup", "Backup your configs", "Press to backup")  
         AddEmptyOption()
         AddTextOptionST("ImportMCMValues", "Import last backup", "Press to import") 
-
-        SetCursorPosition(1)
+        AddEmptyOption()
         AddHeaderOption("Debug")
         AddTextOptionST("ClearMCMBackup", "Clear MCM backup content", "Clear backup")
+       
+
+        SetCursorPosition(1)
+        AddToggleOptionST("DefaultBlackList", "Use default Blacklist file", true)
+        AddHeaderOption("Mods skipped during backup")
+        _modMenuBackupInfos = Utility.CreateIntArray(25, 0)
+        int iInfo = 0
+        while (iInfo < _modMenuBackupInfos.Length)
+            _modMenuBackupInfos[iInfo] = AddTextOption("", "")
+            iInfo += 1
+        endwhile
     
         ; elseif a_page == "YeOlde - Crafting Bag"
     ;     SetCursorFillMode(TOP_TO_BOTTOM)
@@ -196,11 +218,51 @@ function UpdateInfoMsg(string msg)
 	ForceInfoText(msg)
 endfunction
 
+function AddSkippedMod(string name)
+    Log("AddSkippedMod(" + name + ")")
+    ; TODO: ajouter une ligne à _modMenuBackupInfos et l'afficher sur l'interface du mod.
+    ResetTextOptionValues(_modMenuBackupInfos[_modMenuBackupInfosIndex], name, "")
+    _modMenuBackupInfosIndex += 1
 
-function SetYeOldeBackupValues(string jsonPath, int index, int optionType, string strValue, int intValue, float floatValue)
-    ; Since we are managing backups, we don't backup ourself for the moment.
-    ; TODO: Backup ourself but backup/import buttons.
+    if (_modMenuBackupInfosIndex > _modMenuBackupInfos.Length - 1)
+        _modMenuBackupInfosIndex = _modMenuBackupInfos.Length - 1
+    endif
 endfunction
+
+function ClearSkippedModList()
+    _modMenuBackupInfosIndex = 0
+    int i = 0
+    while (i<_modMenuBackupInfos.Length)
+        if (_modMenuBackupInfos[i] > 0)
+            ResetTextOptionValues(_modMenuBackupInfos[i], " ", " ")
+        endif
+        i += 1
+    endwhile
+endfunction
+
+
+function BackupAllPagesOptions(yeolde_mcm_settings settings_mod, int jBackup, string modInfoMsgPrefix)	
+    ; Since we are managing backups, we don't backup ourself for the moment.
+    ; TODO: Backup ourself by overwriting backup/import functions.
+endfunction
+
+
+state DefaultBlackList
+	event  OnSelectST()
+        _useDefaultBlacklistFile = !_useDefaultBlacklistFile
+        ; yeolde_var_craftingbag_enable_hotkey.SetValueInt(craftingbag_enable_hotkey as int)
+        SetToggleOptionValueST(_useDefaultBlacklistFile)
+	endEvent
+
+	event OnDefaultST()
+        SetToggleOptionValueST(true)
+        ; yeolde_var_craftingbag_enable_hotkey.SetValueInt(0)
+    endEvent
+
+	event OnHighlightST()
+        SetInfoText("List of skipped mods for backup task (path: MyGames/[skyrim folder]/JCUser/yeolde-settings/_import_blacklist.json)")
+	endEvent
+endState
 
 
 state ImportMCMValues
@@ -209,9 +271,10 @@ state ImportMCMValues
         bool continue = ShowMessage("Press the button and wait until the import is completed.")
         if (continue)
             SetTextOptionValueST("working...")
-            manager.ImportAllMcmMenuValues(self, OPTIONS_DEFAULT_BACKUP_FILE)
+            ClearSkippedModList()
+            manager.ImportAllMcmMenuValues(self)
             ShowMessage("Import completed.", false)
-            Input.TapKey(15) ; press TAB to exit current menu
+            ; Input.TapKey(15) ; press TAB to exit current menu
         endif
 	endEvent
 
@@ -227,7 +290,8 @@ endState
 state ClearMCMBackup
     event OnSelectST()
         SetTextOptionValueST("deleting backup...")
-        manager.ResetMCMBackupFile(OPTIONS_DEFAULT_BACKUP_FILE)
+        ClearSkippedModList()
+        manager.ResetMCMBackupFile()
 		SetTextOptionValueST("Press to clear")
 	endEvent
 
@@ -261,9 +325,10 @@ state MCMValuesBackup
         bool continue = ShowMessage("Please wait until the backup is completed.")
         if (continue)
             SetTextOptionValueST("working...")
+            ClearSkippedModList()
             manager.BackupAllModValues(self)        
             ShowMessage("Backup completed.", false)
-            Input.TapKey(15) ; press TAB to exit current menu
+            ; Input.TapKey(15) ; press TAB to exit current menu
         endif
 	endEvent
 
