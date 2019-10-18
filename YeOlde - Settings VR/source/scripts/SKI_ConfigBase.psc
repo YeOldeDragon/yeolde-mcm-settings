@@ -30,6 +30,9 @@ int property		OPTION_FLAG_WITH_UNMAP	= 0x04 autoReadonly
 int property		LEFT_TO_RIGHT	= 1	autoReadonly
 int property		TOP_TO_BOTTOM	= 2 autoReadonly
 
+int property		RESULT_SUCCESS	= 0 autoReadonly
+int property		RESULT_ERROR_UNKNOWN	= 1 autoReadonly
+
 
 ; PRIVATE VARIABLES -------------------------------------------------------------------------------
 
@@ -116,12 +119,6 @@ endEvent
 event OnGameReload()
 	if (!_initialized)
 		_initialized = true
-
-		; Buffer alloc/free on config open/close
-		;_optionFlagsBuf	= new int[128]
-		;_textBuf		= new string[128]
-		;_strValueBuf	= new string[128]
-		;_numValueBuf	= new float[128]
 
 		; 0 startValue
 		; 1 defaultValue
@@ -493,6 +490,7 @@ endFunction
 
 ; YeOlde
 function ResetTextOptionValues(int a_option, string a_text, string a_value, bool a_noUpdate = false)
+	{Modify a specific TextOption text & value}
 	Log("ResetTextOptionValue(" + a_option + ", " + a_text + ", " + a_value + ") -> BackupMode: " + _isBackupMode)
 
 
@@ -947,17 +945,12 @@ endFunction
 
 ; YeOlde
 function FakeSetPage(string a_page, int a_index)
-	Log("FakeSetPage(" + a_page + ", " + a_index + ")")
+	{Simulate a set page option, used to parse all page option values}
 	_bak_currentPage = a_page
 	_bak_currentPageNum = 1+a_index
 
-	ClearOptionBuffers()
-	
-	; _state = STATE_RESET
-	Log("OnPageReset() -> START")
+	ClearOptionBuffers()	
 	OnPageReset(a_page)
-	Log("OnPageReset() -> END")
-	; _state = STATE_DEFAULT
 endFunction
 
 function SetPage(string a_page, int a_index)
@@ -1234,6 +1227,7 @@ endFunction
 
 ; YeOlde
 function FakeRequestMenuDialogData(int a_index)
+	{Simulate a Menu request, to receive and find the correct selected index}
 	string optionState = _bak_stateOptionMap[a_index]
 	if (optionState != "")
 		string oldState = GetState()
@@ -1295,7 +1289,7 @@ endFunction
 
 ; YeOlde
 function ForceSliderOptionValue(int a_index, float a_value, string a_stateValue)
-	Log("ForceSliderOptionValue(" + a_index + ", " + a_value + ", " + a_stateValue + ")")
+	{Set a specific value to a SliderOption, used when restoring saved data}
 	if (a_stateValue != "")
 		string oldState = GetState()
 		gotoState(a_stateValue)
@@ -1321,7 +1315,7 @@ endFunction
 
 ; YeOlde
 function ForceMenuIndex(int a_optionIndex, int a_menuIndex, string a_stateValue)
-	Log("ForceMenuIndex(" + a_optionIndex + ", " + a_menuIndex + ", " + a_stateValue + ")")
+	{Set a specific value to a OptionMenu, used when restoring saved data}
 	if (a_stateValue != "")
 		string oldState = GetState()
 		gotoState(a_stateValue)
@@ -1348,7 +1342,7 @@ endFunction
 
 ; YeOlde
 function ForceColorValue(int a_optionIndex, int a_color, string a_stateValue)
-	Log("ForceColorValue(" + a_optionIndex + ", " + a_color + ", " + a_stateValue + ")")
+	{Set a specific value to a ColorOption, used when restoring saved data}
 	if (a_stateValue != "")
 		string oldState = GetState()
 		gotoState(a_stateValue)
@@ -1375,7 +1369,7 @@ endFunction
 
 ; YeOlde
 function ForceTextOption(int a_index, string a_strValue, string a_stateValue)
-	Log("ForceTextOption: strValue: " + a_strValue)
+	{Set a specific value to a TextOption, used when restoring saved data}
 	string originalValue = _bak_strValueBuf[a_index]
 	if( originalValue != a_strValue)
 		while (_bak_strValueBuf[a_index] != a_strValue)
@@ -1395,7 +1389,7 @@ endFunction
 
 ; YeOlde
 function ForceToggleOption(int a_index, int a_numValue, string a_stateValue)
-	Log("ForceToggleOption: index: " + a_index + ", a_numValue: " + a_numValue + ", numValueBuf: " + _bak_numValueBuf[a_index])
+	{Set a specific state to a ToggleOption, used when restoring saved data}
 	if (_bak_numValueBuf[a_index] != a_numValue)
 		if (a_stateValue != "")
 			string oldState = GetState()
@@ -1422,21 +1416,21 @@ function SelectOption(int a_index)
 endFunction
 
 ; YeOlde
-function RestorePages(int jMod, yeolde_patches a_patcher)
-	Log("RestorePages()")
+int function RestorePages(int jMod, yeolde_patches a_patcher)
+	{Restore all option values to a page, used when importing some saved data}
 
 	if (a_patcher.setActivePatch(ModName))
-		a_patcher.OnRestoreRequest(jMod)
+		return a_patcher.OnRestoreRequest(self, jMod)
 	else
-		OnRestoreRequest(jMod)
+		return OnRestoreRequest(jMod)
 	endif
 endfunction
 
-
-; YeOlde: Interface for restoring a custom backups with "YeOlde - Settings"
+; YeOlde, @interface
 ; params:
 ;	- jMod: JMap id for restoring configs
-function OnRestoreRequest(int jMod)
+int function OnRestoreRequest(int jMod)
+	{Main function called for restoring a generic backup. Can be overwritten to personnalize}
 	_isBackupMode = true
 	
 	; Open config
@@ -1455,7 +1449,7 @@ function OnRestoreRequest(int jMod)
 	if (jPage > 0)
 		Log("  RestorePages() -> Page '(none)'")
 		_configManager.ShowBackupInfoMsg("Mod '" + ModName + "', page '(none)'...")
-		ImportPageOptions(jPage)		
+		RestorePageOptions(jPage)		
 		_configManager.ShowBackupInfoMsg("Mod '" + ModName + "', page '(none)'... (DONE)")
 	endif
 
@@ -1467,7 +1461,7 @@ function OnRestoreRequest(int jMod)
 			Log("  RestorePages() -> " + msg)
 			_configManager.ShowBackupInfoMsg(msg)
 			FakeSetPage(Pages[i], i)
-			ImportPageOptions(jPage)	
+			RestorePageOptions(jPage)	
 			_configManager.ShowBackupInfoMsg(msg + " (DONE)")
 		else
 			Log("  RestorePages() -> No backup for page '" + Pages[i] + "'")
@@ -1484,47 +1478,44 @@ function OnRestoreRequest(int jMod)
 	_bak_numValueBuf	= new float[1]
 	_bak_stateOptionMap	= new string[1]
 	_isBackupMode = false
-endfunction
 
+	return RESULT_SUCCESS
+endfunction
 
 ; YeOlde, @interface
 bool function IsBackupRestoreEnabled()	
-	{When overwritten, it means that this mod supports backup and restore tasks.}
+	{When overwritten, it means that the mod supports YeOlde backup and restore tasks.}
 	Log("IsBackupRestoreEnabled() -> return " + false)
 	return false
 endfunction
 
-
 ; YeOlde
-; function BackupAllPagesOptions(int jBackup, string modInfoMsgPrefix)	
-function BackupAllPagesOptions(yeolde_patches a_patcher)	
+int function BackupAllPagesOptions(yeolde_patches a_patcher)
+	{Backup all option values from a page, used when backuping data}	
 	Log("BackupAllPagesOptions() -> " + ModName)
 	int jMod = ModConfig.createInstance(ModName)
+	int result = 0
 	
 	if (a_patcher.setActivePatch(ModName))
-		a_patcher.OnBackupRequest(jMod)
+		result = a_patcher.OnBackupRequest(self, jMod)
 	else
-		OnBackupRequest(jMod)
+		result = OnBackupRequest(jMod)
 	endif
 	
-	Log("BackupAllPagesOptions() -> SAVE FILE")
-	JValue.writeToFile(jMod, BackupConfig.GetDefaultBackupModDirectory() + ModName + ".json")
-	Log("BackupAllPagesOptions() -> SAVE FILE COMPLETED")
+	if(result == 0)
+		JValue.writeToFile(jMod, BackupConfig.GetDefaultBackupModDirectory() + ModName + ".json")
+	endif
 	JValue.release(jMod)
 	JValue.zerolifetime(jMod)
+
+	return result
 endfunction
 
-string[] function OnBackupStrRequest()
-	string[] result = new string[1]
-	return result
-endFunction
-
-
-
-; YeOlde: Interface for creating a custom backups with "YeOlde - Settings"
+; YeOlde, @interface
 ; params:
 ;	- jMod: JMap id for backuping mod configs
-function OnBackupRequest(int jMod)
+int function OnBackupRequest(int jMod)
+	{Main function called for creating a YeOlde backup. Can be overwritten to personnalize}	
 	_isBackupMode = true
 	bool configOpened = false
 	
@@ -1570,11 +1561,13 @@ function OnBackupRequest(int jMod)
 	_bak_numValueBuf	= new float[1]
 	_bak_stateOptionMap	= new string[1]
 	_isBackupMode = false
-endfunction
 
+	return RESULT_SUCCESS
+endfunction
 
 ; YeOlde
 function BackupPageOptions(int jMod)
+	{Backup all options from a specific page. Used then creating a YeOlde backup}
 	Log("BackupPageOptions() -> " + _bak_currentPage)
 
 	string pagename = _bak_currentPage
@@ -1589,12 +1582,9 @@ function BackupPageOptions(int jMod)
 	int index = 0
 	while (index < 128)
 		if (_bak_stateOptionMap[index] != "" || _bak_textBuf[index] != "" || _bak_strValueBuf[index] != "" || _bak_numValueBuf[index] != 0)
-			Log("BackupPageOptions() -> Loop index: " + index)
 			_bak_optionType = _bak_optionFlagsBuf[index] % 0x100
-			Log("BackupPageOptions() -> Option type: " + _bak_optionType)
 			if (_bak_optionType > 1) ; Skip EmptyOption (0) and HeaderOption (1)
 				if (_bak_optionType == 0x05) ; MenuOption
-					Log("YeOlde::BackupPageOptions() -> FakeRequestMenuDialogData: " + _bak_strValueBuf[index])
 					FakeRequestMenuDialogData(index)
 					
 					bool menuFound = false
@@ -1602,7 +1592,7 @@ function BackupPageOptions(int jMod)
 					while(menuIndex < _currentMenuOptions.Length && !menuFound)
 						if (_currentMenuOptions[menuIndex] == _bak_strValueBuf[index])
 							_bak_numValueBuf[index] = menuIndex
-							Log("    YeOlde::BackupPageOptions() -> Menu index found: index " + menuIndex + " for item '" + _bak_textBuf[index] + "'")
+							; Log("    YeOlde::BackupPageOptions() -> Menu index found: index " + menuIndex + " for item '" + _bak_textBuf[index] + "'")
 							menuFound = true
 						endif
 						menuIndex += 1
@@ -1614,13 +1604,13 @@ function BackupPageOptions(int jMod)
 						string menuStrValue = _bak_strValueBuf[index]
 						menuIndex = 0
 						while(menuIndex < _currentMenuOptions.Length && !menuFound)
-							Log("  YeOlde::BackupPageOptions() -> ForceMenuIndex loop, item: " + _currentMenuOptions[menuIndex])
+							; Log("  YeOlde::BackupPageOptions() -> ForceMenuIndex loop, item: " + _currentMenuOptions[menuIndex])
 							ForceMenuIndex(index, menuIndex, _bak_stateOptionMap[index])
 							; _bak_strValueBuf[index] value will have changed by now, so we validate if it's the one we
 							;     are looking for.
 							if (menuStrValue == _bak_strValueBuf[index])
 								_bak_numValueBuf[index] = menuIndex
-								Log("    YeOlde::BackupPageOptions() -> Menu index found: index " + menuIndex + " for item '" + _bak_textBuf[index] + "'")
+								; Log("    YeOlde::BackupPageOptions() -> Menu index found: index " + menuIndex + " for item '" + _bak_textBuf[index] + "'")
 								menuFound = true
 							endif
 
@@ -1629,20 +1619,17 @@ function BackupPageOptions(int jMod)
 					endif
 				endif
 				; Backuping option
-				; Log("PageConfig.addOption(" + jPage + ", " + index + ", " + _bak_optionType + ", " + _bak_strValueBuf[index] + ", " + _bak_numValueBuf[index] + ", " + _bak_stateOptionMap[index] + ")")
 				PageConfig.addOption(jPage, index, _bak_optionType, _bak_strValueBuf[index], _bak_numValueBuf[index], _bak_stateOptionMap[index])
-				
-				; JValue.writeToFile(jMod, _backbackupDirectory)
 			endif
 		endIf
 		index += 1
 	endwhile
 endFunction
 
-
 ; YeOlde
-function ImportPageOptions(int jPage)
-	Log("ImportPageOptions() -> page '" + _bak_currentPage + "'")
+function RestorePageOptions(int jPage)
+	{Restore all option values to a specific page. Used when restoring a YeOlde backup}
+	Log("RestorePageOptions() -> page '" + _bak_currentPage + "'")
 
 	string pagename = _bak_currentPage
 	if (pagename == "")
@@ -1693,7 +1680,6 @@ function ImportPageOptions(int jPage)
 	endwhile
 endFunction
 
-
 function ResetOption(int a_index)
 	string optionState = _stateOptionMap[a_index]
 	if (optionState != "")
@@ -1706,7 +1692,6 @@ function ResetOption(int a_index)
 		OnOptionDefault(option)
 	endIf
 endFunction
-
 
 function HighlightOption(int a_index)
 	_infoText = ""
@@ -1727,10 +1712,9 @@ function HighlightOption(int a_index)
 	UI.InvokeString(JOURNAL_MENU, MENU_ROOT + ".setInfoText", _infoText)
 endFunction
 
-
 ; YeOlde
 function ForceRemapKey(int a_index, int a_keyCode, string a_stateValue)
-	Log("ForceRemapKey(" + a_index + ", " + a_keyCode + ", " + a_stateValue + ")")
+	{Set a specific value to a HotKey, used when restoring saved data}
 	string optionState = _bak_stateOptionMap[a_index]
 	if (a_stateValue != "")
 		string oldState = GetState()
@@ -1830,7 +1814,7 @@ endFunction
 
 ; YeOlde
 function ForceInputText(int a_index, String a_text, string a_stateValue)
-	Log("ForceInputText(" + a_index + ", " + a_text + ", " + a_stateValue + ")")
+	{Set a specific value to a InputText option, used when restoring saved data}
 	if a_stateValue != ""
 		String oldState = self.GetState()
 		self.GotoState(a_stateValue)

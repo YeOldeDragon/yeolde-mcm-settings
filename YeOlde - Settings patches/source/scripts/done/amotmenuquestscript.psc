@@ -467,10 +467,6 @@ endEvent
 
 
 function OnBackupRequest(int jMod)	
-	JMap.setStr(jMod, "savefile", "AMOTUserSettings.xml")
-	FISSInterface fiss = FISSFactory.getFISS()
-	fiss.beginLoad("AMOTUserSettings.xml")
-	fiss.endLoad()
 	SaveUserSettings()
 endfunction
 

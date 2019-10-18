@@ -59,8 +59,7 @@ bool 				_yeoldeModInitialized = false
 
 yeolde_mcm_settings _backup_mod
 
-int					_jBlackList		= 0  	; Mods/pages to skip when importing.
-int					_jBackupInfo	= 0		; file to store debug infos
+int					_jModSelection		= 0  	; Mods/pages to skip when importing.
 int					_jConfig		= 0		; file to store YeOlde Config content
 
 ; YeOlde
@@ -360,7 +359,7 @@ bool function IsBackupRestorePatchActive(string modName, int modIndex)
 		if (modIndex > -1)
 			yeolde_patches patcher = YeOldeBackupQuest as yeolde_patches
 			if (!patcher.IsInitialized)
-				patcher.Initialize()
+				patcher.Initialize(_jConfig)
 			endif
 			return _allMods[modIndex].IsBackupRestoreEnabled() || patcher.isPatchAvailable(modName)
 		endif
@@ -371,57 +370,52 @@ endfunction
 
 
 
-function InitializeImportBlackList()
-	if (_jBlackList > 0)
-		JValue.release(_jBlackList)
-		_jBlackList = 0
+function InitializeModSelectionList()
+	if (_jModSelection > 0)
+		JValue.release(_jModSelection)
+		_jModSelection = 0
 	endif
 
-	_jBlackList = JValue.readFromFile(BackupConfig.GetDefaultBlacklistFilePath())	
-	if (_jBlackList == 0)
-		GenerateDefaultBlackList()
+	_jModSelection = JValue.readFromFile(YeOldeConfig.GetDefaultModSelectionFilePath())	
+	if (_jModSelection == 0)
+		GenerateDefaultModSelectionList()
 	endif
 	
-	JValue.retain(_jBlackList)
+	JValue.retain(_jModSelection)
 endfunction
 
-function GenerateDefaultBlackList()
-	Log("GenerateDefaultBlackList()")
+function GenerateDefaultModSelectionList()
+	Log("GenerateDefaultModSelectionList()")
 
-	if (_jBlackList > 0)
-		JValue.release(_jBlackList)
-		JVAlue.zeroLifetime(_jBlackList)
-		_jBlackList = 0
+	if (_jModSelection > 0)
+		JValue.release(_jModSelection)
+		JVAlue.zeroLifetime(_jModSelection)
+		_jModSelection = 0
 	endif
 
-	_jBlackList = JArray.object()
+	_jModSelection = JArray.object()
 
 	int jConfig = YeOldeConfig.Load()
-	string[] modNames = YeOldeConfig.getAllModNames(jConfig)
 
 	int i = 0
-	while(i < modNames.Length)
-		if (YeOldeConfig.isModWillFail(jConfig, modNames[i]) || YeOldeConfig.isModSelfBackup(jConfig, modNames[i]))
-			; Mod fails and no patch is available
-			JArray.addStr(_jBlackList, modNames[i])
-		elseif(YeOldeConfig.isModNeedPatch(jConfig, modNames[i]))
-			; Mod haves a patch available. Check if the patch is active
-			int modIndex = _allNames.Find(modNames[i])
-			if (modIndex > -1 && !IsBackupRestorePatchActive(modNames[i], modIndex))				
-				JArray.addStr(_jBlackList, modNames[i])
-			endif
+	while(i < _allNames.Length)
+		if (_allNames[i] != "" && (!YeOldeConfig.isModInList(jConfig, _allNames[i]) || YeOldeConfig.isModHaveInternalPatch(jConfig, _allNames[i])))
+			; Mod it listed at risk, so we enable it
+			JArray.addStr(_jModSelection, _allNames[i])
+		elseif (IsBackupRestorePatchActive(_allNames[i], i))				
+				JArray.addStr(_jModSelection, _allNames[i])
 		endif
 		i += 1
 	endwhile
 
-	JArray.sort(_jBlackList)
-	JValue.writeToFile(_jBlackList, BackupConfig.GetDefaultBlacklistFilePath())
+	JArray.sort(_jModSelection)
+	JValue.writeToFile(_jModSelection, YeOldeConfig.GetDefaultModSelectionFilePath())
 endfunction
 
 
 ; YeOlde
 bool function IsModBlackListed(string mod)
-	return !(JArray.findStr(_jBlackList, mod) == -1)
+	return (JArray.findStr(_jModSelection, mod) == -1)
 endfunction
 
 
@@ -431,7 +425,7 @@ function BackupAllModValues(yeolde_mcm_settings settings_mod)
 	SKI_ConfigBase config
 	_backup_mod = settings_mod
 
-	InitializeImportBlackList()
+	InitializeModSelectionList()
 
 	if (_jConfig == 0)
 		_jConfig = YeOldeConfig.Load()
@@ -446,23 +440,14 @@ function BackupAllModValues(yeolde_mcm_settings settings_mod)
 		i += 1
 	endwhile
 
-	; Backup files cleanup
-	; BackupConfig.RemoveBackupFileFromDisk()
 	BackupConfig.RemoveModFilesFromDisk()
-	YeOldeBackupInfo.RemoveFromDisk()
-	
-
-	_jBackupInfo = YeOldeBackupInfo.getFileHandler()
-	YeOldeBackupInfo.addTimeStamp(_jBackupInfo, "1- START timestamp")
-	YeOldeBackupInfo.addBackupStartingMods(_jBackupInfo, _allNames)
-	YeOldeBackupInfo.addInstalledMods(_jBackupInfo, _allNames)
 	
 	int jBackup = BackupConfig.createInstance()
 	JValue.retain(jBackup)
 	YeOldeBackupThreadManager threadMgr = YeOldeBackupQuest as YeOldeBackupThreadManager
 	yeolde_patches patcher = YeOldeBackupQuest as yeolde_patches
 	if (!patcher.IsInitialized)
-		patcher.Initialize()
+		patcher.Initialize(_jConfig)
 	endif
 	threadMgr.Initialize(_backup_mod, patcher, _jConfig)
 
@@ -475,16 +460,12 @@ function BackupAllModValues(yeolde_mcm_settings settings_mod)
 			string modName = _allMods[i].ModName
 			if(IsModBlackListed(modName))
 				Log("YeOlde_JSON:ModName -> " + modName)	
-				YeOldeBackupInfo.addBackSkippedMod(_jBackupInfo, modName)
-				ShowBackupModStatus(modName, "skipped")
+				ShowBackupModStatus(modName, "skipped", 0)
 				ShowBackupInfoMsg("Mod '" + modName + "' is on your blacklist. Mod skipped.")
 			else
-				Log("YeOlde_JSON:ModName -> " + modName)					
+				Log("YeOlde_JSON:ModName -> " + modName)	
 				
 				threadMgr.doBackupTaskAsync(_allMods[i])
-				; config = _allMods[i]
-				; config.BackupAllPagesOptions(jBackup, msgPrefix)
-				; YeOldeBackupInfo.addBackedUpMod(_jBackupInfo, modName)
 			endif
 			nbModsDone += 1		
 		endif
@@ -493,16 +474,9 @@ function BackupAllModValues(yeolde_mcm_settings settings_mod)
 
 	threadMgr.wait_all() ; Start multi-thread backup tasks
 
-	; BackupConfig.SaveAndClose(jBackup, "backup_file")	
 	JValue.release(jBackup)
-	JValue.release(_jBlackList)
-	; JValue.zeroLifetime(jBackup)
-	; JValue.zeroLifetime(_jBlackList)
-
-	; Input.TapKey(15) ; press TAB to exit current menu
+	JValue.release(_jModSelection)
 	
-	YeOldeBackupInfo.addTimeStamp(_jBackupInfo, "2- END timestamp")
-	YeOldeBackupInfo.SaveAndClose(_jBackupInfo)
 	Log("BackupAllModValues -> BACKUP COMPLETED")
 endfunction
 
@@ -518,14 +492,13 @@ Event BackupCompletedCallback(int a_result, string modName)
 	endWhile
 	locked = true
  
-	if (a_result > 0)
+	if (a_result == 0)
 		_backupCompletedCount += 1
-		YeOldeBackupInfo.addBackSuccededMod(_jBackupInfo, modName)		
+		ShowBackupModStatus(modName, "success", a_result)	
 		ShowBackupInfoMsg("Mod '" + modName + "' DONE.")
 	else
 		_backupFailedCount += 1
-		ShowBackupModStatus(modName + " FAILED", "failed")
-		YeOldeBackupInfo.addRestFailedMod(_jBackupInfo, modName)
+		ShowBackupModStatus(modName, "failed", a_result)
 		ShowBackupInfoMsg("Mod '" + modName + "' FAILED to backup.")
 	endif
  
@@ -557,7 +530,7 @@ function RestoreAllModValues(yeolde_mcm_settings settings_mod)
 	YeOldeRestoreThreadManager threadMgr = YeOldeBackupQuest as YeOldeRestoreThreadManager
 	yeolde_patches patcher = YeOldeBackupQuest as yeolde_patches
 	if (!patcher.IsInitialized)
-		patcher.Initialize()
+		patcher.Initialize(_jConfig)
 	endif
 	threadMgr.Initialize(_backup_mod, patcher, _jConfig)
     RegisterForModEvent("YeOlde_RestoreCompletedCallback", "RestoreCompletedCallback")
@@ -566,20 +539,13 @@ function RestoreAllModValues(yeolde_mcm_settings settings_mod)
 	while (i< mods.length)
 		int modIndex = FindModIndexByFileName(mods[i])
 		if (modIndex > -1)
-			int jMod = JMap.getObj(jBackup, mods[i])
-			; config = _allMods[modIndex]
-			; config.RestorePages(jMod, msgPrefix)
-			
+			int jMod = JMap.getObj(jBackup, mods[i])			
 			threadMgr.doRestoreTaskAsync(_allMods[modIndex], jMod)
 		endif
-
-		; TODO: déplacer le call dans le callback		
 		i += 1
 	endWhile
 	
 	threadMgr.wait_all() ; Start multi-thread backup tasks
-
-	; Input.TapKey(15) ; press TAB to exit current menu
 	
 	Log("RestoreAllModValues -> RESTORATION COMPLETED")
 
@@ -594,14 +560,13 @@ Event RestoreCompletedCallback(int a_result, string modName)
 	endWhile
 	restoreLocked = true
  
-	if (a_result > 0)
+	if (a_result == 0)
 		_backupCompletedCount += 1
-		YeOldeBackupInfo.addRestSuccededMod(_jBackupInfo, modName)		
+		ShowBackupModStatus(modName, "success", a_result)		
 		ShowBackupInfoMsg("Mod " + modName + " DONE")	
 	else
 		_backupFailedCount += 1	
-		YeOldeBackupInfo.addRestFailedMod(_jBackupInfo, modName)
-		ShowBackupModStatus(modName + " FAILED", "failed")
+		ShowBackupModStatus(modName, "failed", a_result)
 		ShowBackupInfoMsg("Mod " + modName + " FAILED")	
 	endif
  
@@ -702,7 +667,6 @@ endFunction
 ; @interface
 int function RegisterMod(SKI_ConfigBase a_menu, string a_modName)
 	GotoState("BUSY")
-	;Log("Registering config menu: " + a_menu + "(" + a_modName + ")")
 
 	if (_configCount >= 128)
 		GotoState("")
@@ -895,9 +859,9 @@ function ShowBackupInfoMsg(string a_msg)
 	endif
 endfunction
 
-function ShowBackupModStatus(string a_msg, string type)
+function ShowBackupModStatus(string a_modName, string type, int error_no)
 	if (_backup_mod != none)
-		_backup_mod.AddModStatus(a_msg, type)		
+		_backup_mod.AddModStatus(a_modName, type, error_no)		
 	endif
 endfunction
 

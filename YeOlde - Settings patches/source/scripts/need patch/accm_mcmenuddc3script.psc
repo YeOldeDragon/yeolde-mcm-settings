@@ -248,8 +248,8 @@ function OnRestoreRequest(int jMod)
 	
 	; Execute code from OnCloseConfig().
 
-	RegisterForSingleUpdate(0.5) 
 	_restoreRequest = true
+	RegisterForSingleUpdate(0.5) 
 	
 endfunction
 

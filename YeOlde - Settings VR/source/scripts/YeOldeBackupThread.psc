@@ -18,6 +18,7 @@ endProperty
 
 ;Thread queuing and set-up
 function doBackupAsync(yeolde_mcm_settings settings_mod, yeolde_patches a_patcher, SKI_ConfigBase a_modMenu)
+    Log("doBackupAsync() -> modName: " + a_modMenu.ModName)
  
     ; BackupConfig.GetDefaultBackupModDirectory()
     ;Let the Thread Manager know that this thread is busy
@@ -32,6 +33,7 @@ endFunction
  
 ;Thread queuing and set-up
 function doRestoreAsync(yeolde_mcm_settings settings_mod, yeolde_patches a_patcher, SKI_ConfigBase a_modMenu, int jMod)
+    Log("doRestoreAsync() -> modName: " + a_modMenu.ModName)
  
     ; BackupConfig.GetDefaultBackupModDirectory()
     ;Let the Thread Manager know that this thread is busy
@@ -73,10 +75,10 @@ Event OnBackupRequest()
     if _thread_queued
         Log("OnBackupRequest() -> Thread Queued!")
         
-        _modMenu.BackupAllPagesOptions(_patcher)
+        int result = _modMenu.BackupAllPagesOptions(_patcher)
 
         ;OK, we're done - raise event to return results
-		RaiseEvent_BackupCompletedCallback(1) ; success
+		RaiseEvent_BackupCompletedCallback(result)
  
         ;Set all variables back to default
 		clear_thread_vars()
@@ -92,10 +94,10 @@ Event OnRestoreRequest()
         Log("OnRestoreRequest() -> Thread Queued!")
 		;OK, let's get some work done!
         ; _modMenu.BackupAllPagesOptions()
-        _modMenu.RestorePages(_jMod, _patcher)
+        int result = _modMenu.RestorePages(_jMod, _patcher)
  
         ;OK, we're done - raise event to return results
-		RaiseEvent_RestoreCompletedCallback(1) ; success
+		RaiseEvent_RestoreCompletedCallback(result) ; success
  
         ;Set all variables back to default
 		clear_thread_vars()
