@@ -21,20 +21,18 @@ string property COLOR_BACKUP_UNKNOWN = "#DDDDDD" autoreadonly hidden
 
 
 ; @overrides SKI_ConfigBase
-event OnConfigInit()  
+event OnConfigInit()
     _modMenuToggle = Utility.CreateIntArray(128, 0)
     _modBlacklistToggle = Utility.CreateIntArray(128, 0)
     _modBlacklistEnableFlags = Utility.CreateBoolArray(128)
     _modMenuBackupInfosIndex = 0
 
-    ; string pagesArrayStr = "MCM Menu Settings"
-    
     Pages = new String[4]
     Pages[0] = "Show/hide menus"
     Pages[1] = "Backup/Restore menus"
     Pages[2] = "Backup Mod selection"
     Pages[3] = "Debugging options"
-endEvent  
+endEvent
 
 
 ; @implements SKI_QuestBase
@@ -49,18 +47,18 @@ event OnPageReset(string a_page)
 
     if a_page == ""
 		self.LoadCustomContent("yeolde/settings_splash.dds", 0.000000, 0.000000)
-		return 
+		return
     endIf
 
     self.UnloadCustomContent()
     _modNames = ConfigManager.GetAllModNames()
     _modEnableFlags = ConfigManager.GetAllEnabledModFlags()
-    
+
     int jModNames = JArray.objectWithStrings(_modNames)
     JArray.unique(jModNames)
     int emptyIndex = JArray.findStr(jModNames, "")
     JArray.eraseIndex(jModNames, emptyIndex) ; Remove the string ""
-    
+
     string[] sortedModNames = JArray.asStringArray(jModNames)
     int nbMods = sortedModNames.Length
     if a_page == "Show/hide menus"
@@ -79,15 +77,15 @@ event OnPageReset(string a_page)
                     flag = OPTION_FLAG_DISABLED
                 endif
 
-                _modMenuToggle[modIndex] = AddToggleOption(_modNames[modIndex], _modEnableFlags[modIndex], flag)   
+                _modMenuToggle[modIndex] = AddToggleOption(_modNames[modIndex], _modEnableFlags[modIndex], flag)
             endif
             i += 1
         endwhile
-       
+
         ;; 2nd column
         SetCursorPosition(1)
         AddHeaderOption("")
-        
+
         while (i < nbMods)
             int modIndex = _modNames.Find(sortedModNames[i])
             if (modIndex > -1)
@@ -97,39 +95,39 @@ event OnPageReset(string a_page)
                     flag = OPTION_FLAG_DISABLED
                 endif
 
-                _modMenuToggle[modIndex] = AddToggleOption(_modNames[modIndex], _modEnableFlags[modIndex], flag)   
+                _modMenuToggle[modIndex] = AddToggleOption(_modNames[modIndex], _modEnableFlags[modIndex], flag)
             endif
             i += 1
         endwhile
- 
-    elseif a_page == "Backup/Restore menus"    
+
+    elseif a_page == "Backup/Restore menus"
         Quest qLAL = Quest.GetQuest("ARTHLALChargenQuest")
         Quest qUnbound = Quest.GetQuest("SkyrimUnbound")
-        
-        if (qLAL && !qLAL.IsCompleted())          
+
+        if (qLAL && !qLAL.IsCompleted())
             SetCursorFillMode(TOP_TO_BOTTOM)
             AddTextOption("'Live Another Life' intro must be completed", "")
             AddTextOption("before using the backup/restore tool", "")
-        elseIf (qUnbound && !qUnbound.IsCompleted())     
+        elseIf (qUnbound && !qUnbound.IsCompleted())
             SetCursorFillMode(TOP_TO_BOTTOM)
             AddTextOption("'Skyrim Unbound' intro must be completed", "")
             AddTextOption("before using the backup/restore tool", "")
         else
             SetCursorFillMode(LEFT_TO_RIGHT)
-            AddTextOptionST("MCMValuesBackup", "Backup your configs", "Press to backup")  
+            AddTextOptionST("MCMValuesBackup", "Backup your configs", "Press to backup")
             AddTextOptionST("ImportMCMValues", "Restore your last backup", "Press to restore")
             AddHeaderOption("Last task result")
             AddHeaderOption("")
-            
+
             _modMenuBackupInfos = Utility.CreateIntArray(nbMods, 0)
             int iInfo = 0
             while (iInfo < nbMods)
                 _modMenuBackupInfos[iInfo] = AddTextOption("", "", OPTION_FLAG_HIDDEN)
                 iInfo += 1
             endwhile
-        endIf        
+        endIf
 
-    elseif a_page == "Backup Mod selection"  
+    elseif a_page == "Backup Mod selection"
         int jConfig = YeOldeConfig.Load()
         if (YeOldeConfig.isNewFileVersionAvailable(jConfig))
             bool continue = ShowMessage("A new patch list is available. Do you want to update your file to the latest version?")
@@ -140,7 +138,7 @@ event OnPageReset(string a_page)
             endif
         endif
 
-        int jModSelection = JValue.readFromFile(YeOldeConfig.GetDefaultModSelectionFilePath()) 
+        int jModSelection = JValue.readFromFile(YeOldeConfig.GetDefaultModSelectionFilePath())
 
         if (jModSelection == 0)
             jModSelection = JArray.object()
@@ -172,20 +170,20 @@ event OnPageReset(string a_page)
                 endif
                 string name = "<font color='"+ color + "'>" + _modNames[modIndex] + "</font>"
                 _modBlacklistEnableFlags[modIndex] = (JArray.findStr(jModSelection, sortedModNames[i]) > -1)
-                _modBlacklistToggle[modIndex] = AddToggleOption(name, _modBlacklistEnableFlags[modIndex])  
+                _modBlacklistToggle[modIndex] = AddToggleOption(name, _modBlacklistEnableFlags[modIndex])
             endif
             i += 1
         endwhile
-        
+
         JValue.release(jModSelection)
         JValue.zeroLifetime(jModSelection)
-       
+
         ;; 2nd column
-        SetCursorPosition(1) 
+        SetCursorPosition(1)
         AddTextOption("Legend: | <font color='" + COLOR_BACKUP_SELF_BACKUP + "'>Self backup system</font> | <font color='" + COLOR_BACKUP_UNKNOWN + "'>Status unknown</font> |", "")
         AddTextOption("      | <font color='" + COLOR_BACKUP_PATCH_NEEDED + "'>Patch available</font> | <font color='" + COLOR_BACKUP_PATCH_OK + "'>Mod OK</font> | <font color='" + COLOR_BACKUP_FAIL + "'>Not compatible</font> |", "")
         AddHeaderOption("")
-        
+
         while (i < sortedModNames.Length)
             int modIndex = _modNames.Find(sortedModNames[i])
             string color = COLOR_BACKUP_UNKNOWN
@@ -205,22 +203,22 @@ event OnPageReset(string a_page)
                 endif
                 string name = "<font color='"+ color + "'>" + _modNames[modIndex] + "</font>"
                 _modBlacklistEnableFlags[modIndex] = (JArray.findStr(jModSelection, sortedModNames[i]) > -1)
-                _modBlacklistToggle[modIndex] = AddToggleOption(name, _modBlacklistEnableFlags[modIndex])  
+                _modBlacklistToggle[modIndex] = AddToggleOption(name, _modBlacklistEnableFlags[modIndex])
             endif
             i += 1
         endwhile
-    
-    elseif a_page == "Debugging options"  
+
+    elseif a_page == "Debugging options"
         SetCursorFillMode(TOP_TO_BOTTOM)
-        AddHeaderOption("MCM menus visibility") 
-        AddTextOptionST("ForceMCMReset", "Show all MCM menus", "Press to reset") 
+        AddHeaderOption("MCM menus visibility")
+        AddTextOptionST("ForceMCMReset", "Show all MCM menus", "Press to reset")
     endif
 endEvent
 
 ; @implements SKI_ConfigBase
 event OnOptionSelect(int a_option)
     {Called when the user selects a non-dialog option}
-    
+
     if (CurrentPage == Pages[0]) ; "Show/hide menus"
         int i = 0
         while (i<_modMenuToggle.Length)
@@ -244,13 +242,13 @@ event OnOptionSelect(int a_option)
             endif
             i += 1
         endwhile
-    
+
     elseif (CurrentPage == Pages[2]) ; "Backup blacklist"
         int i = 0
         while (i<_modBlacklistToggle.Length)
-            if (a_option == _modBlacklistToggle[i])    
+            if (a_option == _modBlacklistToggle[i])
                 _modBlacklistEnableFlags[i] = !_modBlacklistEnableFlags[i]
-                int jModSelection = JValue.readFromFile(YeOldeConfig.GetDefaultModSelectionFilePath()) 
+                int jModSelection = JValue.readFromFile(YeOldeConfig.GetDefaultModSelectionFilePath())
 
                 if (jModSelection == 0)
                     jModSelection = JArray.object()
@@ -264,16 +262,16 @@ event OnOptionSelect(int a_option)
                         JArray.eraseIndex(jModSelection, index)
                     endif
                 endif
-                          
-		        JArray.sort(jModSelection)  
+
+		        JArray.sort(jModSelection)
                 JValue.writeToFile(jModSelection, YeOldeConfig.GetDefaultModSelectionFilePath())
                 JValue.release(jModSelection)
                 JValue.zeroLifetime(jModSelection)
-                
+
                 SetToggleOptionValue(a_option, _modBlacklistEnableFlags[i])
-                return 
+                return
             endif
-            
+
             i += 1
         endwhile
     endif
@@ -297,17 +295,17 @@ event OnOptionDefault(int a_option)
                 endif
                 return
             endif
-            
+
             i += 1
         endwhile
     elseif (CurrentPage == Pages[2]) ; "Backup blacklist"
         int i = 0
         while (i<_modBlacklistToggle.Length)
-            if (a_option == _modBlacklistToggle[i])                
+            if (a_option == _modBlacklistToggle[i])
                 _modBlacklistEnableFlags[i] = false
                 SetToggleOptionValue(a_option, false)
             endif
-            
+
             i += 1
         endwhile
     endif
@@ -320,7 +318,7 @@ endfunction
 
 bool _statusBusy = false
 function AddModStatus(string a_name, string a_status, int a_errorNO)
-    Log("AddModStatus(" + a_name + ", " + a_status + ", " + a_errorNO + ")")
+    ; Log("AddModStatus(" + a_name + ", " + a_status + ", " + a_errorNO + ")")
     while (_statusBusy)
         Utility.WaitMenuMode(0.1)
     endwhile
@@ -342,12 +340,12 @@ function AddModStatus(string a_name, string a_status, int a_errorNO)
         SetOptionFlags(_modMenuBackupInfos[_modMenuBackupInfosIndex], flag)
         _modMenuBackupInfosIndex += 1
         ; else
-        ;     _modMenuBackupInfosNbSup += 1        
+        ;     _modMenuBackupInfosNbSup += 1
         ;     ResetTextOptionValues(_modMenuBackupInfos[_modMenuBackupInfosIndex], " + " + _modMenuBackupInfosNbSup + " mod(s)", "")
         ;     SetOptionFlags(_modMenuBackupInfos[_modMenuBackupInfosIndex], flag)
         ; endif
-    endif    
-    
+    endif
+
     _statusBusy = false
 endfunction
 
@@ -364,13 +362,13 @@ function ClearSkippedModList()
 endfunction
 
 
-bool function IsBackupRestoreEnabled()	
+bool function IsBackupRestoreEnabled()
     {When returning true, it means that this mod supports backup and restore tasks.}
     return true
 endfunction
 
 
-int function OnBackupRequest(int jMod)	
+int function OnBackupRequest(int jMod)
     int jModNames = JArray.objectWithStrings(_modNames)
     JArray.unique(jModNames)
     int emptyIndex = JArray.findStr(jModNames, "")
@@ -407,7 +405,7 @@ int function OnRestoreRequest(int jMod)
                 if (!result)
                     Log("Error: Can't change Visible state for mod '" + _modNames[i] + "'")
                 endif
-                
+
                 _modEnableFlags[i] = newState
             endif
         endif
@@ -420,7 +418,6 @@ endfunction
 
 state DefaultModSelectionList
     event  OnSelectST()
-        
         SetTextOptionValueST("Working...")
         ConfigManager.GenerateDefaultModSelectionList()
         ForcePageReset()
@@ -438,7 +435,6 @@ endState
 
 state ImportMCMValues
     event OnSelectST()
-        
         bool continue = ShowMessage("Please wait until the restoration is completed (a message will show).")
         if (continue)
             SetTextOptionValueST("working...")
@@ -482,7 +478,7 @@ state MCMValuesBackup
             SetTextOptionValueST("working...")
             _modMenuBackupInfosNbSup = 0
             ClearSkippedModList()
-            ConfigManager.BackupAllModValues(self)        
+            ConfigManager.BackupAllModValues(self)
             ShowMessage("Backup completed.", false)
             SetTextOptionValueST("Press to backup")
             ; Input.TapKey(15) ; press TAB to exit current menu
